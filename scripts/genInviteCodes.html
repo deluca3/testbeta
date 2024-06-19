@@ -1,0 +1,34 @@
+
+	include("/tou/includes/Database.php");
+			
+	use TradeOnUp\Core\Database;
+
+	if($argc == 2) {
+		$numCodes = intval($argv[1]);
+		
+		if($numCodes > 0) {	
+			$db = Database::getInstance();
+			srand(time());
+			
+			$queryString = "INSERT INTO InviteCodes (inviteCode) VALUES (";
+			
+			for($i=0; $i < $numCodes; $i++) {
+				$queryString .= "'" . generateInviteCode() . "'),(";
+			}
+			
+			$queryString = rtrim($queryString, ",(");
+			
+			$db->queryInsert($queryString);
+			
+			echo($db->error);
+			
+			exit(0);
+		}
+	}
+	
+	exit(1);
+	
+	
+	function generateInviteCode() {
+		return rand(183,982) . substr(uniqid(), -5);
+	}

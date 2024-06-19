@@ -1,0 +1,53 @@
+
+/**
+ * Copyright 2013 Trade On Up LLC.
+ * Originally written by mcorbeil on 9/18/13
+ */
+
+namespace TradeOnUp\Core;
+
+use FSphinx\FSphinxClient;
+
+class Sphinx extends FSphinxClient {
+    private static $sphinx;
+
+    public function __construct() {
+        parent::__construct();
+        $this->setServer("localhost", 3312);
+        $this->setSelect("id");
+        $this->setLimits(0, 10, 100, 1000);
+    }
+
+    public static function getInstance() {
+        if(!self::$sphinx) {
+            self::$sphinx = new Sphinx();
+        }
+
+        return self::$sphinx;
+    }
+
+    public function checkKeyword( $word, $index ) {
+        $word = $this->EscapeString($word);
+        $result = $this->query($word, $index);
+        return $this->parseResults($result);
+    }
+
+    public function checkKeywordUnclean( $word, $index ) {
+        $result = $this->query($word, $index);
+        return $this->parseResults($result);
+    }
+
+    private function parseResults($result) {
+        $matchResults = [];
+
+        if(isset($result["matches"]) && is_array($result["matches"])) {
+            foreach($result["matches"] as $match) {
+                if(isset($match["attrs"]) && isset($match["attrs"]["id"])) {
+                    $matchResults[] = $match["attrs"]["id"];
+                }
+            }
+        }
+
+        return $matchResults;
+    }
+}

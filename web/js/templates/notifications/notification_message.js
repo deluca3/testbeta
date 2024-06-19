@@ -1,0 +1,1 @@
+(function(){dust.register("notif_message",body_0);function body_0(chk,ctx){return chk.write("<b>").reference(ctx.get("fromUser"),ctx,"h").write("</b> sent you a message.");}return body_0;})();

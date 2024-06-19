@@ -1,0 +1,113 @@
+
+
+namespace TradeOnUp\Core;
+
+if(!defined("NO_INC")) {
+    include_once("/tou/includes/Database.php");
+    include_once("/tou/includes/Memcache.php");
+    include_once("/tou/includes/HashID.php");
+    include_once("/tou/includes/Log.php");
+    include_once("/tou/includes/Mail.php");
+    include_once("/tou/includes/PayPal.php");
+    include_once("/tou/includes/search/Solr.php");
+
+    include("/tou/includes/model/Model.php");
+    include("/tou/includes/model/Users.php");
+    include("/tou/includes/model/Messages.php");
+    include("/tou/includes/model/Categories.php");
+    include("/tou/includes/model/Items.php");
+    include("/tou/includes/model/ItemImages.php");
+    include("/tou/includes/model/DeletedImages.php");
+    include("/tou/includes/model/Offers.php");
+    include("/tou/includes/model/OfferLists.php");
+    include("/tou/includes/model/Transactions.php");
+    include("/tou/includes/model/Notifications.php");
+    include("/tou/includes/model/Followers.php");
+    include("/tou/includes/model/ItemWatch.php");
+    include("/tou/includes/model/Feeds.php");
+    include("/tou/includes/model/Reviews.php");
+    include("/tou/includes/model/Wishlists.php");
+    include("/tou/includes/model/InviteCodes.php");
+    include("/tou/includes/model/PayPalTransactions.php");
+}
+
+class Core {
+    public static function stringStartsWith($haystack, $needle) {
+        return !strncmp($haystack, $needle, strlen($needle));
+    }
+
+    public static function stringEndsWith($haystack, $needle) {
+        $length = strlen($needle);
+        if ($length == 0) {
+            return true;
+        }
+
+        return (substr($haystack, -$length) === $needle);
+    }
+
+    public static function geoDistance($lat1, $lon1, $lat2, $lon2, $unit = "M") {
+        $theta = $lon1 - $lon2;
+        $dist = sin(deg2rad($lat1)) * sin(deg2rad($lat2)) +  cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * cos(deg2rad($theta));
+        $dist = acos($dist);
+        $dist = rad2deg($dist);
+        $miles = $dist * 60 * 1.1515;
+        $unit = strtoupper($unit);
+
+        if ($unit == "K") {
+            return ($miles * 1.609344);
+        } else if ($unit == "N") {
+            return ($miles * 0.8684);
+        } else {
+            return $miles;
+        }
+    }
+
+    public static function arrayIsAssoc($array) {
+        return (bool)count(array_filter(array_keys($array), 'is_string'));
+    }
+
+    public static function mysqlTimestamp($timestamp = null) {
+        if(is_null($timestamp)) $timestamp = time();
+        return strftime("%Y-%m-%d %H:%M:%S", $timestamp);
+    }
+
+    public static function secureRandomHex($length, &$isStrong) {
+        return substr(bin2hex(openssl_random_pseudo_bytes($length, $isStrong)), 0, 32);
+    }
+
+    public static function copyArrayElements($arrayFrom, &$arrayTo, $elements, $copyAs = null, $asArray = false) {
+        if(is_array($arrayFrom)) {
+            if(is_string($elements)) {
+                $elements = explode(", ", $elements);
+                $tmpArray = [];
+                $count = 0;
+
+                if(is_string($copyAs)) $copyAs = explode(", ", $copyAs);
+
+                for($i=0;$i<sizeof($elements);$i++) {
+                    $element = $elements[$i];
+                    $copyElement = $element;
+
+                    if(is_array($copyAs) && isset($copyAs[$i])) $copyElement = $copyAs[$i];
+
+                    if(array_key_exists($element, $arrayFrom)) {
+                        if($asArray) {
+                            $tmpArray[$copyElement] = $arrayFrom[$element];
+                        } else {
+                            $arrayTo[$copyElement] = $arrayFrom[$element];
+                        }
+                        ++$count;
+                    }
+                }
+
+                if($asArray) {
+                    $arrayTo[] = $tmpArray;
+                }
+
+                if($count > 0) return true;
+            }
+        }
+
+        return false;
+    }
+}

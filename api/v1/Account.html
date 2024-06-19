@@ -1,0 +1,465 @@
+
+
+namespace TradeOnUp\API;
+
+use Luracast\Restler\RestException;
+
+//use \GeoIp2\WebService\Client as GeoClient;
+use TradeOnUp\Core\Database;
+use TradeOnUp\Core\HashID;
+use TradeOnUp\Core\Utility;
+use TradeOnUp\Models\Feeds;
+use TradeOnUp\Models\Followers;
+use TradeOnUp\Models\InviteCodes;
+use TradeOnUp\Models\Reviews;
+use TradeOnUp\Models\Users;
+use TradeOnUp\Models\Notifications;
+use TradeOnUp\Core\Core;
+use TradeOnUp\Core\Validate;
+use TradeOnUp\Core\Log;
+use TradeOnUp\Models\Wishlists;
+
+class Account {
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Followers
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    function getFollowers($user = null, $start = 0, $limit = 100) {
+        if(is_null($user)) $user = ['id' => $_SESSION['userID']];
+        else $user = Users::getUser($user);
+
+        $retVal = [];
+
+        if($limit - $start > 100) { //TODO: Tweak this
+            throw new RestException(400, "Request too large.");
+        }
+
+        if(is_array($user)) {
+            if($followers = Followers::getFollowersForUser($user['id'], $start, $limit)) {
+                for($idxFollow = 0; $idxFollow < sizeof($followers); $idxFollow++) {
+                    Core::copyArrayElements($followers[$idxFollow], $retVal[$idxFollow], "username, avatar");
+                }
+            }
+        } else throw new RestException(404, "No such user found.");
+
+        return $retVal;
+    }
+
+    function getFollowing($user = null, $start = 0, $limit = 100) {
+        if(is_null($user)) $user = ['id' => $_SESSION['userID']];
+        else $user = Users::getUser($user);
+
+        $retVal = [];
+
+        if($limit - $start > 100) { //TODO: Tweak this
+            throw new RestException(400, "Request too large.");
+        }
+
+        if(is_array($user)) {
+            if($followers = Followers::getFollowedByUser($user['id'], $start, $limit)) {
+                for($idxFollow = 0; $idxFollow < sizeof($followers); $idxFollow++) {
+                    Core::copyArrayElements($followers[$idxFollow], $retVal[$idxFollow], "username, avatar");
+                }
+            }
+        } else throw new RestException(404, "No such user found.");
+
+        return $retVal;
+    }
+
+    protected function postFollow($user) {
+        $db = Database::getInstance();
+        $user = Users::getUser($user);
+
+        $db->begin_transaction();
+
+        if(is_array($user)) {
+            $newFollow = [
+                "userID" => $_SESSION['userID'],
+                "followUserID" => $user['id'],
+                "addedOn" => Core::mysqlTimestamp()
+            ];
+
+            if(Followers::insert($newFollow)) {
+                //Add feed items.
+                if(Feeds::addFollow($_SESSION['userID'], $_SESSION['userID'], $user['id'])) {
+                    //Added
+                }
+
+                $db->commit();
+
+                return true;
+            } else throw new RestException(500, "Database failure.");
+        } else throw new RestException(404, "No such user found.");
+    }
+
+    protected function deleteFollow($user) {
+        $user = Users::getUser($user);
+
+        if(is_array($user)) {
+            if(Followers::deleteFollowerForUser($_SESSION['userID'], $user['id'])) {
+                return true;
+            } else throw new RestException(500, "Database failure.");
+        } else throw new RestException(404, "No such user found.");
+    }
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Notes
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    protected function postNote($request_data = null) {
+        if(isset($request_data['note'])) {
+            if(Feeds::addNote($_SESSION['userID'], $request_data['note'])) {
+                return true;
+            } else throw new RestException(500, "Database failure.");
+        } else throw new RestException(412, "Missing required parameters.");
+    }
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Avatars
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    protected function putGravatar() {
+        $updatedUser = [
+            "id" => $_SESSION['userID'],
+            "avatar" => null
+        ];
+
+        if(Users::update($updatedUser, "avatar")) {
+            return true;
+        } else throw new RestException(500, "Database failure.");
+    }
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Transaction Feed
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    protected function getTransactionFeed() {
+        if($user = Users::getUser($_SESSION['userID'])) {
+            if($feedData = Feeds::getFollowFeedForUser($user['id'])) {
+                $retVal = null;
+                $hashIDs = new HashID();
+                $feedData = $hashIDs->encrypt_keys($feedData);
+
+                foreach($feedData as $feedItem) {
+                    if(is_null($feedItem['avatar'])) {
+                        $feedItem['avatar'] = "/img/stockUser.png";
+                    }
+
+                    $feedItem['type'] = (int)$feedItem['type'];
+                    $retVal[] = $feedItem;
+                }
+
+                return $retVal;
+            } else throw new RestException(404, "No feed data.");
+        } else throw new RestException(404, "No such user found.");
+    }
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Activity Feed
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    function getFeed($request_data = null) {
+        $user = null;
+
+        if(isset($request_data['user'])) {
+            $user = $request_data['user'];
+        } else $user = $_SESSION['userID'];
+
+        if($user = Users::getUser($user)) {
+            $isOwner = ($user['id'] == $_SESSION['userID']);
+
+            if($feedData = Feeds::getActivityFeedForUser($user['id'], $isOwner)) {
+                $retVal = null;
+                $hashIDs = new HashID();
+                $feedData = $hashIDs->encrypt_keys($feedData);
+
+                foreach($feedData as $feedItem) {
+                    if(is_null($feedItem['avatar'])) {
+                        $feedItem['avatar'] = "/img/stockUser.png";
+                    }
+
+                    $feedItem['type'] = (int)$feedItem['type'];
+                    $retVal[] = $feedItem;
+                }
+
+                return $retVal;
+            } else throw new RestException(404, "No feed data.");
+        } else throw new RestException(404, "No such user found.");
+    }
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Notifications
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    protected function getNotifications() {
+        if($notifications = Notifications::getNotificationsForUser($_SESSION['userID'])) {
+            $retVal = null;
+            $hashIDs = new HashID();
+            $notifications = $hashIDs->encrypt_keys($notifications);
+
+            foreach($notifications as $notification) {
+                if(is_null($notification['avatar'])) {
+                    $notification['avatar'] = "/img/stockUser.png";
+                }
+
+                $notification['type'] = (int)$notification['type'];
+                $retVal[] = $notification;
+            }
+
+            $updatedNotif = [
+                "userID" => $_SESSION['userID'],
+                "seenAt" => Core::mysqlTimestamp()
+            ];
+
+            //Set all as seen
+            if(Notifications::updateMany($updatedNotif, "seenAt", "userID")) {
+                //Updated
+            }
+
+            return $retVal;
+        } else throw new RestException(404, "No notifications.");
+    }
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Reviews
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    function getReviews() {
+        if(!isset($_GET['user']) || is_null($_GET['user'])) {
+            $user = ["id" => $_SESSION['userID']];
+        } else $user = Users::getUser($_GET['user']);
+
+        if(is_array($user)) {
+            $targetReviews = Reviews::getReviewsForUser($user['id']);
+            $offerReviews = Reviews::getOfferReviewsForUser($user['id']);
+
+            $reviews = array_merge((array)$targetReviews, (array)$offerReviews);
+
+            if(is_array($reviews) && sizeof($reviews) > 0) {
+                $retVal = null;
+                $hashIds = HashID::getInstance();
+
+                usort($reviews, function($a, $b) {
+                    return $a['addedAt'] < $b['addedAt'] ? 1 : -1;
+                });
+
+                foreach($reviews as $review) {
+                    Core::copyArrayElements($review, $retVal, "id, username, avatar, name, url, transactionID, starRating, reviewText, addedAt", null, true);
+                    $retVal[sizeof($retVal) - 1]['starRating'] = (int)$retVal[sizeof($retVal) - 1]['starRating'];
+
+                    if(is_null($retVal[sizeof($retVal) - 1]['avatar'])) $retVal[sizeof($retVal) - 1]['avatar'] = "/img/stockUser.png";
+                }
+
+                $retVal = $hashIds->encrypt_keys($retVal, "id, transactionID");
+
+                return $retVal;
+            } else throw new RestException(404, "No reviews found.");
+        } else throw new RestException(404, "No such user.");
+    }
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Wishlists
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    protected function getWish($wishID) {
+        $hashIds = HashID::getInstance();
+        $wishID = $hashIds->decrypt($wishID);
+
+        if($wish = Validate::wishOwner($wishID, $_SESSION['userID'])) {
+            $retVal = null;
+
+            $wish['tags'] = implode(", ", explode(",", $wish['tags']));
+
+            Core::copyArrayElements($wish, $retVal, "identifier, tags");
+
+            return $retVal;
+        } else throw new RestException(404, "Target wish not found.");
+    }
+
+    function getWishlist() {
+        if(!isset($_GET['user']) || is_null($_GET['user'])) {
+            $user = ["id" => $_SESSION['userID']];
+        } else $user = Users::getUser($_GET['user']);
+
+        if(is_array($user)) {
+            $wishlist = Wishlists::getWishlistForUser($user);
+
+            if(is_array($wishlist)) {
+                $retVal = null;
+                $hashIds = HashID::getInstance();
+
+                foreach($wishlist as $wishlistItem) {
+                    $wishlistItem['tags'] = implode(", ", explode(",", $wishlistItem['tags']));
+
+                    Core::copyArrayElements($wishlistItem, $retVal, "id, identifier, tags", null, true);
+                }
+
+                $retVal = $hashIds->encrypt_keys($retVal);
+
+                return $retVal;
+            } else throw new RestException(404, "No wishlist items found.");
+        } else throw new RestException(404, "No such user.");
+    }
+
+    protected function postWishlist($request_data = null) {
+        if(!isset($request_data['ident']) || !isset($request_data['tags'])) {
+            throw new RestException(400, "Missing parameters.");
+        }
+
+        $ident = trim($request_data['ident']);
+        $tags = explode(",", $request_data['tags']);
+
+        foreach($tags as &$tag) {
+            $tag = trim($tag);
+        }
+
+        $tagString = implode(",", $tags);
+
+        $newWishlistItem = [
+            "userID" => $_SESSION['userID'],
+            "identifier" => $ident,
+            "tags" => $tagString
+        ];
+
+        if(Wishlists::insert($newWishlistItem)) {
+            return true;
+        } else throw new RestException(500, "Database failure.");
+    }
+
+    protected function putWishlist($request_data = null) {
+        if(!isset($request_data['id']) || !isset($request_data['ident']) || !isset($request_data['tags'])) {
+            throw new RestException(400, "Missing parameters.");
+        }
+
+        $hashIds = HashID::getInstance();
+
+        $wishID = (int)$hashIds->decrypt($request_data['id']);
+        $ident = trim($request_data['ident']);
+        $tags = explode(",", $request_data['tags']);
+
+        //Validate ownership
+        if(!Validate::wishOwner($wishID, $_SESSION['userID'])) {
+            throw new RestException(403, "You do not own one or more of the target wishlist items.");
+        }
+
+        foreach($tags as &$tag) {
+            $tag = trim($tag);
+        }
+
+        $tagString = implode(",", $tags);
+
+        $updatedWishlistItem = [
+            "id" => $wishID,
+            "userID" => $_SESSION['userID'],
+            "identifier" => $ident,
+            "tags" => $tagString
+        ];
+
+        if(Wishlists::update($updatedWishlistItem, "identifier, tags")) {
+            return true;
+        } else throw new RestException(500, "Database failure.");
+    }
+
+    protected function deleteWishlist($wishIDs) {
+        $hashIds = HashID::getInstance();
+        $wishIDs = $hashIds->decrypt_multi(explode(";", $wishIDs));
+
+        if(Validate::wishOwner($wishIDs, $_SESSION['userID'])) {
+            if(Wishlists::deleteMultiple($wishIDs)) {
+                return true;
+            } else throw new RestException(500, "Database failure");
+        } else throw new RestException(403, "You do not own one or more of the target wishlist items.");
+    }
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Account Creation / Modification
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    /*public static function getLocation() {
+        $geoIP = new GeoClient(87786, "YjkJOnMR2GHr");
+
+        $record = $geoIP->city($_SERVER['REMOTE_ADDR']);
+
+        $retVal = [
+            "country" => $record->country->isoCode,
+            "state" => $record->mostSpecificSubdivision->isoCode,
+            "city" => $record->city->name,
+            "zip" => $record->postal->code,
+            "coordinates" => [
+                "latitude" => $record->location->latitude,
+                "longitude" => $record->location->longitude
+            ]
+        ];
+
+        return $retVal;
+    }*/
+
+    //Check for existence of email/user (for ajax served client-side validation during registration)
+    public function get() {
+        if(isset($_GET['username'])) {
+            $username = trim($_GET['username']);
+
+            if(Users::getByField($username, "username")) {
+                return false;
+            } else return true;
+        } elseif(isset($_GET['email'])) {
+            $email = trim($_GET['email']);
+
+            if(Users::getByField($email, "email")) {
+                return false;
+            } else return true;
+        } else throw new RestException(400, "Missing parameters");
+    }
+
+    //Create an account
+    public function post($username, $password, $email, $code) {
+        if(!isset($username) || !isset($password) ||
+            !isset($email) || !isset($code)) {
+            throw new RestException(400, "Missing parameters");
+        }
+
+        if(!filter_var($email, FILTER_VALIDATE_EMAIL) ||
+            strlen($email) < 5 || strlen($email) > 40) {
+            throw new RestException(400, "Invalid email address");
+        }
+
+        if(!preg_match('/^[A-Za-z][A-Za-z0-9]{5,31}$/', $username)) {
+            throw new RestException(400, "Username format/length is invalid");
+        }
+
+        if(strlen($password) > 50) {
+            throw new RestException(400, "Password exceeds maximum length.");
+        }
+
+        if(!self::get(["username" => $username]) || !self::get(["email" => $email])) {
+            throw new RestException(403, "Username / email already in use.");
+        }
+
+        if($inviteCode = InviteCodes::getByField(trim($code), "inviteCode")) {
+            $inviteCode = $inviteCode[0];
+
+            if(!is_null($inviteCode['usedBy'])) {
+                throw new RestException(403, "Invite code has already been used.");
+            }
+
+            $newUser = [
+                "username" => trim($username),
+                "password" => trim($password),
+                "email" => trim($email)
+            ];
+
+            if($newUserID = Users::insert($newUser)) {
+                $inviteCode['usedBy'] = $newUserID;
+
+                if(InviteCodes::update($inviteCode, "usedBy")) {
+                    return true;
+                } else throw new RestException(500, "Database failure.");
+            } else throw new RestException(500, "Database failure.");
+        } else throw new RestException(403, "Invalid invite code");
+    }
+
+    //Modify an account
+    protected function put($request_data = null) {
+        //TODO
+    }
+}

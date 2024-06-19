@@ -1,0 +1,37 @@
+
+
+	include("/tou/includes/Database.php");
+	
+	use TradeOnUp\Core\Database;
+	
+	$topDir = "/tou/devCDN"; //Sloppy but w/e
+	
+	$db = Database::getInstance();
+	
+	$rows = $db->queryMultipleRows("SELECT url FROM DeletedImages");
+	
+	if(is_array($rows)) {
+		foreach($rows as $row) {
+			$row['url'] = str_replace("/cdn/", "/tou/devCDN/", $row['url']);
+			
+			unlink($row['url']);
+		}
+		
+		$db->queryAffected("TRUNCATE TABLE DeletedImages");
+	}
+	
+	RemoveEmptySubFolders("/tou/devCDN");
+	
+	function RemoveEmptySubFolders($path)
+	{
+		global $topDir;
+		$empty=true;
+		
+		foreach (glob($path.DIRECTORY_SEPARATOR."*") as $file)
+		{
+			$empty &= is_dir($file) && RemoveEmptySubFolders($file);
+		}
+		
+		return $empty && (strcasecmp($topDir, $path) ? rmdir($path) : true);
+	}
+	

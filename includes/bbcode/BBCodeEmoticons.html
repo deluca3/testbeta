@@ -1,0 +1,65 @@
+
+/**
+ * Copyright 2013 Trade On Up LLC.
+ * Originally written by Gage on 11/6/13
+ */
+
+namespace TradeOnUp\Core\BBCode;
+
+define("BB_EMOTICON_PATH", "/img/emoticons/");
+
+/**
+ * Provides bbcode emoticon replacements
+ *
+ * @author Greg Gage
+ */
+class BBCodeEmoticons {
+    private $outputHtml;
+
+    function __construct($bbcode)
+    {
+        $this->outputHtml = $bbcode;
+
+        //Add rules for each emoticon
+        $this->replaceEmoticon(":)", "smile.png");
+        $this->replaceEmoticon(":angel:", "angel.png");
+        $this->replaceEmoticon(":angry:", "angry.png");
+        $this->replaceEmoticon("8-)", "cool.png");
+        $this->replaceEmoticon(":'(", "cwy.png");
+        $this->replaceEmoticon(":ermm:", "ermm.png");
+        $this->replaceEmoticon("&lt;3", "heart.png");
+        $this->replaceEmoticon(":(", "sad.png");
+        $this->replaceEmoticon(":O", "shocked.png");
+        $this->replaceEmoticon(":P", "tongue.png");
+        $this->replaceEmoticon(";)", "wink.png");
+        $this->replaceEmoticon(":alien:", "alien.png");
+        $this->replaceEmoticon(":blink:", "blink.png");
+        $this->replaceEmoticon(":blush:", "blush.png");
+        $this->replaceEmoticon(":cheerful:", "cheerful.png");
+        $this->replaceEmoticon(":devil:", "devil.png");
+        $this->replaceEmoticon(":dizzy:", "dizzy.png");
+        $this->replaceEmoticon(":getlost:", "getlost.png");
+        $this->replaceEmoticon(":happy:", "happy.png");
+        $this->replaceEmoticon(":kissing:", "kissing.png");
+        $this->replaceEmoticon(":ninja:", "ninja.png");
+        $this->replaceEmoticon(":pinch:", "pinch.png");
+        $this->replaceEmoticon(":pouty:", "pouty.png");
+        $this->replaceEmoticon(":sick:", "sick.png");
+        $this->replaceEmoticon(":sideways:", "sideways.png");
+        $this->replaceEmoticon(":silly:", "silly.png");
+        $this->replaceEmoticon(":sleeping:", "sleeping.png");
+        $this->replaceEmoticon(":unsure:", "unsure.png");
+        $this->replaceEmoticon(":woot:", "w00t.png");
+        $this->replaceEmoticon(":wassat:", "wassat.png");
+    }
+
+    private function replaceEmoticon($emoticon, $imageFilename) {
+        $fullPath = BB_EMOTICON_PATH . $imageFilename;
+
+        $this->outputHtml = str_replace($emoticon, '<img src="' . $fullPath . '"/>', $this->outputHtml);
+    }
+
+    public function asHtml() {
+        return $this->outputHtml;
+    }
+}

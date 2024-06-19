@@ -1,0 +1,8 @@
+.fileinput-button input {
+    transform: translate(-755px, 0px) scale(4);
+}
+
+div.selectedGlow {
+    box-shadow: 0 0 15px 0 #428BCA; /* Standard */
+    border: 5px solid #003399;
+}

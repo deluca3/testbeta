@@ -1,0 +1,283 @@
+
+$_doRedirect = true; //Will redirect to login page if non-authenticated user attempts to get here.
+include("/tou/includes/authValidate.php");
+include("/tou/includes/model/Model.php");
+include("/tou/includes/model/Items.php");
+include("/tou/includes/model/Users.php");
+include("/tou/includes/HashID.php");
+include("/tou/includes/view/renderFunctions.php");
+
+use TradeOnUp\Core\HashID;
+use TradeOnUp\Models\Users;
+use TradeOnUp\Models\Items;
+
+$displayName = null;
+$ownerDisplayName = null;
+
+$profile = null;
+$itemData = null;
+
+if(isset($_GET['for'])) {
+    //Item + Owner
+    $hashIDs = HashID::getInstance();
+    $realID = $hashIDs->decrypt($_GET['for']);
+
+    $itemData = Items::getItemWithUser($realID);
+
+    if(!$itemData || $itemData['listed'] == 0 || $itemData['userID'] == @$_SESSION['userID'] || !is_null($itemData['endedAt'])) {
+        header("Location: /");
+    }
+
+    $itemData['id'] = $_GET['for'];
+
+    $ownerDisplayName = $itemData['username'];
+
+    //User
+    $profile = Users::getUser($_SESSION['userID']);
+
+    $displayName = $profile['username'];
+
+} else header("Location: /");
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Make an Offer &middot; Trade On Up</title>
+    <meta name="description" content="Trade up until you get what you want">
+    <meta name="author" content="Trade On Up">
+
+    <!-- Le styles -->
+    <link href='http://fonts.googleapis.com/css?family=Open+Sans:400,300,600,700,800' rel='stylesheet' type='text/css'>
+    <link href="/css/bootstrap.css" type="text/css" rel="stylesheet">
+    <link href="/css/bootstrap-fixed.css" type="text/css" rel="stylesheet">
+
+    <link href="/css/bootstrap-editable.css" type="text/css" rel="stylesheet">
+
+    <link rel="stylesheet" href="/css/font-awesome.css">
+
+    <!--[if IE 7]>
+    <link rel="stylesheet" href="/css/font-awesome-ie7.css">
+    <![endif]-->
+
+    <link href="/css/typeahead.js-bootstrap.css" type="text/css" rel="stylesheet">
+    <link href="/css/bootstrap-modal-bs3patch.css" type="text/css" rel="stylesheet">
+    <link href="/css/bootstrap-modal.css" type="text/css" rel="stylesheet">
+
+    <link href="/css/tradeonup.css" type="text/css" rel="stylesheet">
+
+    <link href="/css/magnific-popup.css" type="text/css" rel="stylesheet">
+
+    <!-- IE support -->
+    <!--[if lt IE 9]>
+    <script src="/js/html5shiv.js" type="text/javascript"></script>
+    <script src="/js/respond.src.js" type="text/javascript"></script>
+    <script src="/js/core/ieFix.js" type="text/javascript"></script>
+
+    <link href="/css/tradeonup-ie.css" type="text/css" rel="stylesheet">
+    <![endif]-->
+
+    <!--[if gte IE 9]>
+    <style type="text/css">
+        .gradient {
+            filter: none !important;
+        }
+    </style>
+    <![endif]-->
+
+    <!-- Fav icon -->
+    <link rel="shortcut icon" href="/img/favicon.ico">
+</head>
+
+<body>
+
+ include("/tou/includes/view/topNav.php"); 
+
+<div class="container fixedHeaderPadding">
+    <div id="pageContainer">
+        <div style="padding-bottom: 15px;" class="panel panel-default row">
+            <div class="panel-heading" style="margin-bottom: 15px;">
+                <h3 class="panel-title"><i class="icon-exchange">&nbsp;</i>Make an Offer</h3>
+            </div>
+            <div class="row rowFit">
+                <div class="col-xs-5 flatCols">
+                    <div class="col-xs-4">
+                        
+                            if(!is_null($profile['avatar'])) {
+                                $avatar = $profile['avatar'];
+                            } else $avatar = "/img/stockUser.png";
+                        
+                        <a href="#"><img src=" echo $avatar; " class="img-responsive"></a>
+                    </div>
+                    <div class="col-xs-8">
+                        <ul class="feedList noBottomBorder">
+                            <li><a href="/profile/ echo $profile['username'] " class="profileHeader"> echo $displayName; </a></li>
+                            <li>
+                                <div>
+                                     renderStars($profile['id'], true); 
+                                </div>
+                            </li>
+                            <li> echo $profile['location']; </li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="col-xs-2"></div>
+                <div class="col-xs-5 flatCols">
+                    <div class="col-xs-4">
+                        
+                            if(!is_null($itemData['avatar'])) {
+                                $itemAvatar = $itemData['avatar'];
+                            } else $itemAvatar = "/img/stockUser.png";
+                        
+                        <a href="#"><img src=" echo $itemAvatar; " class="img-responsive"></a>
+                    </div>
+                    <div class="col-xs-8">
+                        <ul class="feedList noBottomBorder">
+                            <li><a href="/profile/ echo $itemData['username'] " class="profileHeader"> echo $ownerDisplayName; </a></li>
+                            <li>
+                                <div>
+                                     renderStars($itemData['userID'], true); 
+                                </div>
+                            </li>
+                            <li> echo $itemData['location']; </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div>
+                <div class="col-xs-5">
+                    <div id="offerList" class="offerList"></div>
+                </div>
+                <div class="col-xs-2">
+                    <div style="margin-top: 125px; text-align: center;">
+                        <img src="/img/forDot.png">
+                        <br><br>
+                        <div id="offerButtons" style="display: none;">
+                            <button id="btnFinalizeOffer" style="margin-bottom: 5px;" class="btn btn-warning" type="button"><b>Finalize Offer</b></button>
+                            <button id="btnResetOffer" class="btn btn-danger" type="button"><b>Reset</b></button>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-xs-5">
+                    <div id="targetItemBox" class="itemBox" data-itemID=" echo $itemData['id']; " style="margin: 0;">
+                        <div class="itemImage fixedRatioContainer">
+                            <div class="fixedRatioDummy"></div>
+                            <div class="fixedRatio">
+                                <a href="/item/ echo $itemData['id']; ">
+                                    <img class="fullSize" src=" echo $itemData['url']; ">
+                                </a>
+                            </div>
+
+                             if((int)$itemData['quantity'] > 1): 
+                                <div id="btnTargetItemQty" class="chQtyOverlay" data-totalQty=" echo $itemData['quantity']; ">
+                                    Quantity:&nbsp;<span id="targetItemQty">1</span>
+                                </div>
+                             endif; 
+                        </div>
+                        <div class="itemInfo">
+                            <div class="itemText itemLink" style="font-weight: bold;">
+                                <a href="/item/ echo $itemData['id']; "> echo $itemData['name']; </a>
+                            </div>
+                            <div class="itemText"> echo $itemData['description']; </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="offerItemPanel" class="panel panel-primary row">
+            <div class="panel-heading" style="margin-bottom: 15px;">
+                <h3 class="panel-title"><i class="icon-trophy">&nbsp;</i>Select your Item(s)</h3>
+
+                <div class="input-group input-group-sm pull-right panelInput">
+                    <span class="input-group-addon input-group-addon-info">
+                        <label style="margin:0;" for="txtItemSearch">
+                            <i class="icon-search"></i>
+                        </label>
+                    </span>
+
+                    <input id="txtItemSearch" type="text" placeholder="Find an Item" class="form-control">
+                </div>
+
+                <button id="btnOfferCash" style="margin-right: 10px;" type="button" class="btn btn-sm btn-success panelBtn"><i class="icon-money">&nbsp;</i>Offer Cash</button>
+            </div>
+            <div class="noLinkOutline" id="itemList"></div>
+        </div>
+
+    </div>
+</div>
+
+<div id="mdlChangeQty" class="modal" data-backdrop="static" tabindex="-1" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h4>Modify Quantity</h4>
+        </div>
+        <div class="modal-body">
+            <div style="text-align: center; margin-bottom: 0;" class="well well-sm">
+                <input type="text" id="mdlChangeQty_qtyField"
+                       class="form-control" data-type="digits" maxlength="4"
+                       style="width: 80px; display: inline-block;"/>
+
+                <div class="btn-group" style="margin-left: 1px;">
+                    <button id="mdlChangeQty_btnQtyDown" type="button" class="btn btn-default"><i class="icon-arrow-down"></i></button>
+                    <button id="mdlChangeQty_btnQtyUp" type="button" class="btn btn-default"><i class="icon-arrow-up"></i></button>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer" style="margin-top: 0;">
+            <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+            <button type="button" id="mdlChangeQty_btnDone" class="btn btn-primary">Done</button>
+        </div>
+    </div>
+</div>
+
+
+<div id="mdlSubmitOffer" class="modal" data-backdrop="static" tabindex="-1" style="display: none;">
+    <div class="modal-content">
+        <div class="modal-header">
+            <div class="mdlView mdlSubmitOffer_sendView">
+                <h3>Submitting offer...</h3>
+            </div>
+            <div class="mdlView mdlSubmitOffer_errorView" style="display: none">
+                <h3>Error!</h3>
+            </div>
+            <div class="mdlView mdlSubmitOffer_successView" style="display: none">
+                <h3>Offer Successful</h3>
+            </div>
+        </div>
+        <div class="modal-body">
+            <div class="mdlView mdlSubmitOffer_sendView" style="text-align: center;">
+                We are submitting your offer, please wait a moment.
+                <br/>
+                <img src="/img/ajax-loader.gif"/>
+            </div>
+            <div class="mdlView mdlSubmitOffer_errorView" style="text-align: center; display: none;">
+                <span id="mdlSubmitOffer_error">Error!</span>
+            </div>
+            <div class="mdlView mdlSubmitOffer_successView" style="text-align: center; display: none;">
+                Your offer has been successfully submitted.
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" style="display:none;" id="mdlSubmitOffer_btnDone" class="btn btn-primary">Done</button>
+        </div>
+    </div>
+</div>
+
+ include("/tou/includes/view/footer.php"); 
+
+<!-- Le javascript
+================================================== -->
+<!-- Placed at the end of the document so the pages load faster -->
+
+ include("/tou/includes/view/globalInc.php"); 
+
+<script src="/js/templates/offer_itemBox.js" type="text/javascript"></script>
+<script src="/js/templates/offer_offerList.js" type="text/javascript"></script>
+
+<script src="/js/bootstrap-editable.js" type="text/javascript"></script>
+
+<script src="/js/page-includes/root/makeOffer.js" type="text/javascript"></script>
+
+</body>
+</html>

@@ -1,0 +1,137 @@
+
+/**
+ * Copyright 2013 Trade On Up LLC.
+ * Originally written by Gage on 10/25/13
+ */
+
+namespace TradeOnUp\Core;
+
+define("IDHASH_SALT", 'xBP!advhR\e%D$-5Qh5WJY9I+G9VJom7');
+
+use Hashids\Hashids;
+
+class HashID extends Hashids {
+    private static $hashids;
+
+    function __construct() {
+        parent::__construct(IDHASH_SALT, 6);
+    }
+
+    public static function getInstance() {
+        if(!self::$hashids) {
+            self::$hashids = new HashID();
+        }
+
+        return self::$hashids;
+    }
+
+    public function encrypt_multi($arr) {
+        if(!self::arrayIsAssoc($arr)) {
+            for($i=0; $i < sizeof($arr); $i++) {
+                if(is_numeric($arr[$i])) {
+                    $arr[$i] = $this->encode($arr[$i]);
+                }
+            }
+
+            return $arr;
+        }
+    }
+
+    public function encrypt_keys($arr, $arrKeys = "id") {
+        if(is_array($arr)) {
+            $arrKeys = explode(", ", $arrKeys);
+
+            $funcHashArray = function($array) use ($arrKeys, &$funcHashArray) {
+                foreach($array as $mKey => $mValue) {
+                    if(is_array($array[$mKey])) {
+                        $array[$mKey] = $funcHashArray($array[$mKey]);
+                    } elseif(is_numeric($mValue) && in_array($mKey, $arrKeys)) {
+                        $array[$mKey] = $this->encode($mValue);
+                    }
+                }
+
+                return $array;
+            };
+
+            foreach($arr as $key => $value) {
+                if(is_array($arr[$key])) {
+                    $arr[$key] = $funcHashArray($arr[$key]);
+                } elseif(is_numeric($value) && in_array($key, $arrKeys)) {
+                    $arr[$key] = $this->encode($value);
+                }
+            }
+
+            return $arr;
+        } elseif(is_numeric($arr)) {
+            return $this->encode($arr);
+        }
+
+        return null;
+    }
+
+    public function decrypt_multi($arr) {
+        if(!self::arrayIsAssoc($arr)) {
+            for($i=0; $i < sizeof($arr); $i++) {
+                if(is_string($arr[$i])) {
+                    $arr[$i] = $this->decode($arr[$i]);
+                }
+            }
+
+            return $arr;
+        }
+
+        return null;
+    }
+
+    public function decrypt_array($arr, $arrKeys = "id") {
+        if(is_array($arr)) {
+            $arrKeys = explode(", ", $arrKeys);
+
+            $funcHashArray = function($array) use ($arrKeys, &$funcHashArray) {
+                foreach($array as $mKey => $mValue) {
+                    if(is_array($array[$mKey])) {
+                        $array[$mKey] = $funcHashArray($array[$mKey]);
+                    } elseif(is_string($mValue) && in_array($mKey, $arrKeys)) {
+                        $array[$mKey] = $this->decode($mValue);
+                    }
+                }
+
+                return $array;
+            };
+
+            foreach($arr as $key => $value) {
+                if(is_array($arr[$key])) {
+                    $arr[$key] = $funcHashArray($arr[$key]);
+                } elseif(is_string($value) && in_array($key, $arrKeys)) {
+                    $arr[$key] = $this->decode($value);
+                }
+            }
+
+            return $arr;
+        } elseif(is_string($arr)) {
+            return (int)$this->decode($arr);
+        }
+
+        return null;
+    }
+
+    public function decrypt($hash) {
+        $retVal = parent::decode($hash);
+
+        if(sizeof($retVal) > 1) {
+            return $retVal;
+        } elseif(sizeof($retVal) == 1) {
+            return (int)$retVal[0];
+        }
+
+        return null;
+    }
+
+    public function encrypt($id) {
+        return parent::encode($id);
+    }
+
+    private function arrayIsAssoc($array) {
+        return (bool)count(array_filter(array_keys($array), 'is_string'));
+    }
+} 

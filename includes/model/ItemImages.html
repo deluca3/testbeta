@@ -1,0 +1,110 @@
+
+
+namespace TradeOnUp\Models;
+
+include_once("/tou/includes/ImageUtilities.php");
+
+use TradeOnUp\Core\Database;
+use TradeOnUp\Core\ImageUtilities;
+
+class ItemImages extends Model {
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Lookup Functions
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    public static function getItemImagesForItem($item) {
+        $db = Database::getInstance();
+        $rows = null;
+        $whereClause = null;
+
+        if(is_numeric($item)) {
+            $whereClause = "itemID = '$item'";
+        } elseif(is_array($item) && isset($item['id']) && is_numeric($item['id'])) {
+            $item['id'] = (int)$item['id'];
+
+            if($item['id'] > 0) {
+                $whereClause = "itemID = '{$item['id']}'";
+            }
+        }
+
+        if(!is_null($whereClause)) {
+            $rows = $db->queryMultipleRows("SELECT * FROM ItemImages WHERE $whereClause");
+        }
+
+        if(is_array($rows)) {
+            return $rows;
+        }
+
+        return null;
+    }
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Delete Functions
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    public static function delete($itemImage, $validateOwnerID = null) {
+        $db = Database::getInstance();
+        $wasDeleted = false;
+        $whereClause = null;
+        $isMulti = false;
+
+        if(is_numeric($itemImage)) {
+            $whereClause = "id = '$itemImage'";
+        } elseif(is_array($itemImage) && isset($itemImage['id']) && is_numeric($itemImage['id'])) {
+            $itemImage['id'] = (int)$itemImage['id'];
+
+            if($itemImage['id'] > 0) {
+                $whereClause = "id = '{$itemImage['id']}'";
+            }
+        } elseif(is_array($itemImage)) { //Multi image delete
+            $whereClause = "id IN (";
+
+            foreach($itemImage as $itemImg) {
+                $itemImg = (int)$itemImg;
+
+                if($itemImg > 0) {
+                    $whereClause .= "'$itemImg', ";
+                }
+            }
+
+            $whereClause = rtrim($whereClause, ", ") . ")";
+
+            $isMulti = true;
+        }
+
+        //Move image(s) to DeletedImages
+        if(!is_null($whereClause)) {
+            $imageRows = $db->queryMultipleRows("SELECT userID, url FROM ItemImages WHERE $whereClause");
+
+            if(is_array($imageRows)) {
+                if($isMulti) {
+                    $insertValues = "(";
+
+                    foreach($imageRows as $imageRow) {
+                        if(!is_null($validateOwnerID) && ((int)$imageRow['userID'] != (int)$validateOwnerID)) {
+                            return null; //Null for ownership failure
+                        }
+
+                        $imageRow['url'] = $db->real_escape_string($imageRow['url']); //Just to be safe.
+                        $insertValues .= "'{$imageRow['url']}'), (";
+                    }
+
+                    $insertValues = rtrim($insertValues, ", (");
+
+                    $db->queryInsert("INSERT INTO DeletedImages (url) VALUES $insertValues");
+                } else {
+                    $imageRows[0]['url'] = $db->real_escape_string($imageRows[0]['url']);
+
+                    $db->queryInsert("INSERT INTO DeletedImages SET url = '{$imageRows[0]['url']}'");
+                }
+            }
+
+            //Delete ItemImage itself
+            $wasDeleted = $db->queryAffected("DELETE FROM ItemImages WHERE $whereClause");
+        }
+
+        return $wasDeleted ? true : false;
+    }
+
+}

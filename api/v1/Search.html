@@ -1,0 +1,99 @@
+
+/**
+ * Copyright 2013 Trade On Up LLC.
+ * Originally written by mcorbeil on 9/18/13
+ */
+
+namespace TradeOnUp\API;
+
+use Luracast\Restler\RestException;
+use TradeOnUp\Core\Core;
+use TradeOnUp\Core\Solr;
+use TradeOnUp\Core\Database;
+use TradeOnUp\Core\HashID;
+use TradeOnUp\Models\Items;
+use TradeOnUp\Models\Reviews;
+use TradeOnUp\Models\Users;
+
+class Search {
+    function getItems($for) {
+        if(isset($for)) {
+            $solr = new Solr();
+
+            $resultData = [];
+            $idList = [];
+
+            $itemResults = $solr->basicSearch($for);
+
+            foreach($itemResults as $item) {
+                $idList[] = $item['id'];
+            }
+
+            if(is_array($idList)) {
+                $resultData = Items::getItemSearchForIds($idList);
+            }
+
+            if(sizeof($resultData) > 0) {
+                $retVal = [];
+
+                foreach($resultData as $result) {
+                    Core::copyArrayElements($result, $retVal['results'], "id, name, description, url, location, username, avatar, averageStars", null, true);
+
+                    //TODO: This is stupid, fix the template to use the field name.
+                    $retVal['results'][sizeof($retVal['results']) - 1]['starRating'] = $retVal['results'][sizeof($retVal['results']) - 1]['averageStars'];
+                }
+
+                //Add to suggestterms.txt - this is just temporary to try it out TODO: Make this not crap, make it possible to have Solr on another server.
+                file_put_contents("/tou/suggest.txt", "\n$for", FILE_APPEND);
+
+                $hashIDs = HashID::getInstance();
+
+                $retVal = $hashIDs->encrypt_keys($retVal);
+
+                return $retVal;
+            } else throw new RestException(404, "No results found");
+        } else throw new RestException(412, "Missing required parameters");
+    }
+
+    function getNavSuggest($for) {
+        //TODO: Suggest names of users who are being followed.
+        if(isset($for)) {
+            $solr = new Solr();
+
+            $suggestResults = $solr->suggesterQuery($for);
+
+            if(sizeof($suggestResults) > 0) {
+                return $suggestResults;
+            } else throw new RestException(404, "No results found");
+        } else throw new RestException(412, "Missing required parameters");
+    }
+
+    function getUserSuggest($for) {
+        /*if(isset($for)) {
+            $sphinx = Sphinx::getInstance();
+            $db = Database::getInstance();
+
+            $resultData = [];
+
+            $searchFor = $db->real_escape_string($for);
+
+            $userResults = $sphinx->checkKeyword($searchFor, "users");
+
+            if(is_array($userResults)) {
+                $userResults = Users::getUserSuggestions($userResults);
+
+                if(is_array($userResults)) {
+                    $resultData = $userResults;
+                }
+            }
+
+            if(sizeof($resultData) > 0) {
+                $hashIDs = HashID::getInstance();
+
+                $resultData = $hashIDs->encrypt_keys($resultData);
+
+                return $resultData;
+            } else throw new RestException(404, "No results found");
+        } else throw new RestException(412, "Missing required parameters");*/
+    }
+}

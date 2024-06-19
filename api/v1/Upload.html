@@ -1,0 +1,123 @@
+
+/**
+ * Copyright 2013 Trade On Up LLC.
+ * Originally written by Gage on 9/11/13
+ */
+
+namespace TradeOnUp\API;
+
+use Luracast\Restler\RestException;
+
+use TradeOnUp\Models\Users;
+use TradeOnUp\Models\Items;
+use TradeOnUp\Models\ItemImages;
+use TradeOnUp\Core\ImageUtilities;
+use TradeOnUp\Core\Core;
+use TradeOnUp\Core\HashID;
+use TradeOnUp\Core\Validate;
+use TradeOnUp\Core\Log;
+
+class Upload {
+    protected function postImage($request_data = null) { //TODO: Rewrite this to work with real CDN
+        $uploads_dir = '/tou/devCDN';
+
+        if(isset($request_data['itemID'])) {
+            $hashIDs = HashID::getInstance();
+            $itemID = $hashIDs->decrypt($request_data['itemID']);
+
+            $itemDir = uniqid() . $itemID;
+
+            //Make sure the user owns the item they're trying to upload images for.
+            if(!Validate::itemOwner($itemID, $_SESSION['userID'])) {
+                throw new RestException(403, "Cannot modify items outside user account.");
+            }
+
+            //We're only going to work with 1 file per request. (Can be changed)
+            if(sizeof($_FILES["files"]["tmp_name"]) > 1) {
+                throw new RestException(400, "Cannot upload multiple images in a single request.");
+            }
+
+            while(is_dir("$uploads_dir/$itemDir")) { $itemDir = uniqid() . $itemID; }
+
+            if ($_FILES["files"]["error"][0] == UPLOAD_ERR_OK) {
+                $name = uniqid("" , true);
+                while(file_exists("$uploads_dir/$itemDir/$name.jpg")) { $name = uniqid("" , true); }
+                $name = $name . ".jpg";
+
+                @mkdir("$uploads_dir/$itemDir", 0755);
+
+                ImageUtilities::prepImage($_FILES["files"]["tmp_name"][0], "$uploads_dir/$itemDir/$name");
+
+                //Add db entry
+                $itemImage = [
+                    "userID" => $_SESSION['userID'],
+                    "itemID" => $itemID,
+                    "url" => "/cdn/$itemDir/$name",
+                    "imageSizeBytes" => filesize("$uploads_dir/$itemDir/$name"),
+                    "uploadedAt" => Core::mysqlTimestamp()
+                ];
+
+                if($imageID = ItemImages::insert($itemImage)) {
+                    //Only set the thumbnail if we've gotten a thumbIndex value.
+                    if(isset($request_data['isThumb']) && $request_data['isThumb'] == 1) {
+                        ImageUtilities::cropImageAuto("$uploads_dir/$itemDir/$name", "$uploads_dir/$itemDir/t_$name");
+
+                        //Add thumb db entry
+                        $thumbImage = [
+                            "userID" => $_SESSION['userID'],
+                            "itemID" => $itemID,
+                            "url" => "/cdn/$itemDir/t_$name",
+                            "imageSizeBytes" => filesize("$uploads_dir/$itemDir/t_$name"),
+                            "uploadedAt" => Core::mysqlTimestamp(),
+                            "isThumb" => $imageID
+                        ];
+
+                        if($thumbID = ItemImages::insert($thumbImage)) {
+                            $itemUpdate = [
+                                "id" => $itemID,
+                                "thumbImageID" => (int)$thumbID
+                            ];
+
+                            Items::update($itemUpdate, "thumbImageID");
+                        }
+                    }
+                } else throw new RestException(500, "Database failure");
+            }
+
+            return true;
+        } else throw new RestException(412, "Missing required parameters");
+    }
+
+    protected function postAvatar($request_data = null) { //TODO: Rewrite this to work with real CDN
+        $uploads_dir = '/tou/devCDN';
+
+        $hashIDs = HashID::getInstance();
+
+        $avatarDir = "avatar_" . $hashIDs->encrypt($_SESSION['userID']);
+
+        //We're only going to work with 1 file per request. (Can be changed)
+        if(sizeof($_FILES["files"]["tmp_name"]) > 1) {
+            throw new RestException(400, "Cannot upload multiple avatar images.");
+        }
+
+        if ($_FILES["files"]["error"][0] == UPLOAD_ERR_OK) {
+            if(!is_dir("$uploads_dir/$avatarDir")) {
+                @mkdir("$uploads_dir/$avatarDir", 0755);
+            }
+
+            ImageUtilities::prepImage($_FILES["files"]["tmp_name"][0], "$uploads_dir/$avatarDir/avatar.jpg");
+            ImageUtilities::cropImageAuto("$uploads_dir/$avatarDir/avatar.jpg", "$uploads_dir/$avatarDir/t_avatar.jpg");
+
+            //Update db entry
+            $userUpdate = [
+                "id" => $_SESSION['userID'],
+                "avatar" => "/cdn/$avatarDir/t_avatar.jpg",
+            ];
+
+            if(Users::update($userUpdate, "avatar")) {
+                return $userUpdate['avatar'];
+            } else throw new RestException(500, "Database failure");
+        } else throw new RestException(500, "Upload failure");
+    }
+
+}

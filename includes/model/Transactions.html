@@ -1,0 +1,37 @@
+
+/**
+ * Copyright 2013 Trade On Up LLC.
+ * Originally written by Gage on 11/7/13
+ */
+
+namespace TradeOnUp\Models;
+
+use TradeOnUp\Core\Database;
+use TradeOnUp\Models\Users;
+use TradeOnUp\Core\Log;
+
+class Transactions extends Model {
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Lookup Functions
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    public static function getTransactionTargetItem($transactionID) {
+        $db = Database::getInstance();
+
+        $transactionID = (int)$transactionID;
+
+        $row = $db->querySingleRow("SELECT i.*, u.*, ii.url FROM Transactions t
+                                    LEFT JOIN Items i ON t.itemID = i.id
+                                    LEFT JOIN ItemImages ii ON ii.id = i.thumbImageID
+                                    LEFT JOIN Users u ON t.userID = u.id
+                                    WHERE t.id = '$transactionID'");
+
+        if(is_array($row)) {
+            return $row;
+        }
+
+        return null;
+    }
+
+}

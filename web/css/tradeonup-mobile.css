@@ -1,0 +1,236 @@
+@media (min-width: 768px) {
+    .btn-group-responsive .pull-left{ float: left; }
+    .btn-group-responsive .pull-right{ float: right; }
+    .btn-group-responsive .btn {
+        display: inline-block;
+        width: inherit;
+        margin-bottom: 0;
+        padding: 6px 12px;
+    }
+    .btn-group-responsive .btn-lg { padding: 10px 16px; }
+    .btn-group-responsive .btn-sm { padding: 5px 10px; }
+    .btn-group-responsive .btn-xs { padding: 3px 5px; }
+}
+
+/* Smartphones (portrait and landscape) ----------- */
+@media only screen
+and (min-device-width : 320px)
+and (max-device-width : 480px) {
+
+    body:after {
+        content: 'smartphone';
+        display: none;
+    }
+
+    div#mainContent {
+        padding-left: 0 !important;
+    }
+
+    div#topNav {
+        background-color: #F7F7F7;
+        box-shadow: 0 1px 2px rgba(0,0,0,.3);
+        width: 100%;
+        position: relative;
+    }
+
+    .fixedHeaderPadding {
+        padding-top: 0;
+    }
+}
+
+/* Smartphones (landscape) ----------- */
+@media only screen
+and (min-width : 321px) {
+
+    body:after {
+        content: 'smartphone landscape';
+        display: none;
+    }
+
+    div#mainContent {
+        padding-left: 0 !important;
+    }
+
+    ul.feedTabs > li > a {
+        border-radius: 5px 5px 0 0;
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+
+    div#topNav {
+        background-color: #F7F7F7;
+        box-shadow: 0 1px 2px rgba(0,0,0,.3);
+        width: 100%;
+        position: relative;
+    }
+
+    .fixedHeaderPadding {
+        padding-top: 0;
+    }
+
+}
+
+/* Smartphones (portrait) ----------- */
+@media only screen
+and (max-width : 320px) {
+
+    body:after {
+        content: 'smartphone portrait';
+        display: none;
+    }
+
+    /*ul.feedTabs > li > a {
+        border-radius: 5px;
+    }*/
+
+    div.tab-content {
+        border-radius: 5px;
+        border: 1px solid #DDDDDD;
+        border-top: none;
+    }
+
+    div#topNav {
+        background-color: #F7F7F7;
+        box-shadow: 0 1px 2px rgba(0,0,0,.3);
+        width: 100%;
+        position: relative;
+    }
+
+    .fixedHeaderPadding {
+        padding-top: 0;
+    }
+
+}
+
+/* iPhone 4 ----------- */
+@media
+only screen and (-webkit-min-device-pixel-ratio : 1.5),
+only screen and (min-device-pixel-ratio : 1.5) {
+
+    body:after {
+        content: 'smartphone';
+        display: none;
+    }
+
+    div#mainContent {
+        padding-left: 0 !important;
+    }
+
+    div#topNav {
+        background-color: #F7F7F7;
+        box-shadow: 0 1px 2px rgba(0,0,0,.3);
+        width: 100%;
+        position: relative;
+    }
+
+    .fixedHeaderPadding {
+        padding-top: 0;
+    }
+
+}
+
+/* iPads (portrait and landscape) ----------- */
+@media only screen
+and (min-device-width : 768px)
+and (max-device-width : 1024px) {
+
+    body:after {
+        content: 'tablet';
+        display: none;
+    }
+
+    div#topNav {
+        background-color: #F7F7F7;
+        box-shadow: 0 1px 2px rgba(0,0,0,.3);
+        width: 100%;
+        position: relative;
+    }
+
+}
+
+/* iPads (landscape) ----------- */
+@media only screen
+and (min-device-width : 768px)
+and (max-device-width : 1024px)
+and (orientation : landscape) {
+
+    body:after {
+        content: 'tablet landscape';
+        display: none;
+    }
+
+    div#mainContent {
+        padding-left: 15px !important;
+    }
+
+    div#topNav {
+        background-color: #F7F7F7;
+        box-shadow: 0 1px 2px rgba(0,0,0,.3);
+        width: 100%;
+        position: relative;
+    }
+
+    .fixedHeaderPadding {
+        padding-top: 0;
+    }
+}
+
+/* iPads (portrait) ----------- */
+@media only screen
+and (min-device-width : 768px)
+and (max-device-width : 1024px)
+and (orientation : portrait) {
+
+    body:after {
+        content: 'tablet portrait';
+        display: none;
+    }
+
+    div#mainContent {
+        padding-left: 0 !important;
+    }
+
+    div#topNav {
+        background-color: #F7F7F7;
+        box-shadow: 0 1px 2px rgba(0,0,0,.3);
+        width: 100%;
+        position: relative;
+    }
+
+    .fixedHeaderPadding {
+        padding-top: 0;
+    }
+
+}
+
+/* Desktops and laptops ----------- */
+@media only screen
+and (min-width : 1224px) {
+    ul.feedTabs > li > a {
+        border-radius: 5px 5px 0 0;
+        padding-left: 35px;
+        padding-right: 35px;
+    }
+
+    div#mainContent {
+        padding-left: 15px !important;
+    }
+
+    div#topNav {
+        background-color: #F7F7F7;
+        box-shadow: 0 1px 2px rgba(0,0,0,.3);
+        width: 100%;
+        position: fixed;
+        z-index: 1000;
+    }
+
+    .fixedHeaderPadding {
+        padding-top: 50px;
+    }
+}
+
+/* Large screens ----------- */
+@media only screen
+and (min-width : 1824px) {
+
+}

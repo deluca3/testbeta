@@ -1,0 +1,269 @@
+
+/**
+ * Copyright 2013 Trade On Up LLC.
+ * Originally written by Gage on 11/7/13
+ */
+
+namespace TradeOnUp\API;
+
+use Luracast\Restler\RestException;
+use TradeOnUp\Core\Database;
+use TradeOnUp\Models\OfferLists;
+use TradeOnUp\Models\Reviews;
+use TradeOnUp\Models\Transactions as transModel;
+use TradeOnUp\Models\Users;
+use TradeOnUp\Models\Items;
+use TradeOnUp\Models\Offers;
+use TradeOnUp\Core\Core;
+use TradeOnUp\Core\HashID;
+
+class Transactions {
+
+    protected function getList($time = 0, $view = "all") {
+        $this->_getTransactionTimeframe($time);
+
+        $offersByUser = Offers::getOffersMadeByUser($_SESSION['userID'], $time, $view);
+        $offersToUser = Offers::getOffersMadeToUser($_SESSION['userID'], $time, $view);
+
+        if(is_null($offersByUser) && is_null($offersToUser)) {
+            throw new RestException(404, "No transactions for this user.");
+        }
+
+        $hashIDs = HashID::getInstance();
+        $retVal = [];
+
+        //Get calling user data
+        if($thisUser = Users::getById($_SESSION['userID'])) {
+            Core::copyArrayElements($thisUser, $retVal['user'], "username, location, avatar");
+
+            $displayName = $thisUser['firstName'];
+
+            if(strlen($thisUser['lastName']) > 0) {
+                $displayName .= " " . $thisUser['lastName'];
+            }
+
+            if(strlen($displayName) == 0) $displayName = $thisUser['username'];
+
+            $retVal['user']['displayName'] = $displayName;
+
+            $reviewData = Reviews::getReviewAverageForUser($_SESSION['userID']);
+
+            $retVal['user']['starRating'] = (int)$reviewData['rating'];
+        } else throw new RestException(500, "Failed to retrieve user data.");
+
+        foreach($offersByUser as $offerItem) {
+            $this->_generateTransactionData($offerItem, $retVal);
+        }
+
+        foreach($offersToUser as $offerItem) {
+            $offerItem['toUser'] = true;
+            $this->_generateTransactionData($offerItem, $retVal);
+        }
+
+        $retVal['transactions'] = array_values($retVal['transactions']);
+
+        usort($retVal['transactions'], function($a, $b) {
+            return strtotime($a['offerAdded']) < strtotime($b['offerAdded']) ? 1 : -1;
+        });
+
+        //Hash IDs
+        $retVal = $hashIDs->encrypt_keys($retVal, "id, offerID, itemID, transactionID");
+
+        return $retVal;
+    }
+
+    protected function get($transactionID) {
+        $hashIDs = HashID::getInstance();
+        $retVal = [];
+
+        $transactionID = $hashIDs->decrypt($transactionID);
+
+        if($transactionData = OfferLists::getOfferItemsForTransaction($transactionID)) {
+            foreach($transactionData as $offerItem) {
+                Core::copyArrayElements($offerItem, $retVal['offer']['items'], "itemID, name, description, url, quantity", null, true);
+            }
+
+            $displayName = $transactionData[0]['firstName'];
+
+            if(strlen($transactionData[0]['lastName']) > 0) {
+                $displayName .= " " . $transactionData[0]['lastName'];
+            }
+
+            if(strlen($displayName) == 0) $displayName = $transactionData[0]['username'];
+
+            $retVal['offer']['user']['displayName'] = $displayName;
+
+            Core::copyArrayElements($transactionData[0], $retVal['offer']['user'], "username, avatar, location");
+
+            $reviewData = Reviews::getReviewAverageForUser($transactionData[0]['offerUserID']);
+
+            $retVal['offer']['user']['starRating'] = (int)$reviewData['rating'];
+
+            $transaction = transModel::getById($transactionID);
+
+            if(is_array($transaction)) {
+                if($transaction['userID'] == $_SESSION['userID']) {
+                    $retVal['hasReview'] = ($transaction['offerReviewed'] != null);
+                } else {
+                    $retVal['hasReview'] = ($transaction['reviewed'] != null);
+                }
+            }
+
+            //Hash IDs
+            $retVal = $hashIDs->encrypt_keys($retVal, "itemID");
+
+            return $retVal;
+        } else throw new RestException(404, "No such transaction.");
+    }
+
+    protected function postReview($request_data = null) {
+        if(!isset($request_data['transactionID']) || !isset($request_data['stars']) || !isset($request_data['review'])) {
+            throw new RestException(412, "Missing parameters");
+        }
+
+        $db = Database::getInstance();
+        $hashIds = HashID::getInstance();
+
+        $transactionID = $hashIds->decrypt($request_data['transactionID']);
+        $starRating = (int)$request_data['stars'];
+        $review = $request_data['review'];
+
+        //Data sanity
+        if($starRating > 5) $starRating = 5;
+        if($starRating < 1) $starRating = 1;
+
+        if(strlen($review) > 256) {
+            throw new RestException(400, "Review is too long. Maximum is 256 characters.");
+        }
+
+        $db->begin_transaction();
+
+        //Everything checks out, confirm the user can review this transaction.
+        if($transaction = transModel::getById($transactionID)) {
+            $isValid = false;
+            $madeOffer = false;
+
+            //Confirm it hasn't been reviewed yet & the user is involved in the transaction.
+            if(is_null($transaction['reviewed']) && $transaction['offerUserID'] == $_SESSION['userID']) {
+                $isValid = true;
+                $madeOffer = true;
+            } elseif(is_null($transaction['offerReviewed']) && $transaction['userID'] == $_SESSION['userID']) {
+                $isValid = true;
+                $madeOffer = false;
+            }
+
+            if($isValid) {
+                //Review is authorized, add it.
+                $newReview = [
+                    "transactionID"    => $transactionID,
+                    "userID"     => $madeOffer ? $transaction['userID'] : $transaction['offerUserID'],
+                    "fromUserID" => $madeOffer ? $transaction['offerUserID'] : $transaction['userID'],
+                    "starRating" => $starRating,
+                    "reviewText" => $review,
+                    "addedAt"    => Core::mysqlTimestamp()
+                ];
+
+                if($reviewID = Reviews::insert($newReview)) {
+                    $transactionUpdate = ["id" => $transactionID];
+
+                    if(!$madeOffer) {
+                        $transactionUpdate['offerReviewed'] = $reviewID;
+                    } else {
+                        $transactionUpdate['reviewed'] = $reviewID;
+                    }
+
+                    if(transModel::update($transactionUpdate, "reviewed, offerReviewed")) {
+                        if(Users::updateUserReviews($madeOffer ? $transaction['userID'] : $transaction['offerUserID'])) {
+                            $db->commit();
+                            return true;
+                        } else throw new RestException(500, "Database failure - unable to update user review data.");
+                    } else throw new RestException(500, "Database failure - unable to set reviewed flag.");
+                } else throw new RestException(500, "Database failure - unable to add review.");
+            } else throw new RestException(403, "You cannot review this transaction.");
+        } else throw new RestException(500, "Database failure.");
+    }
+
+    private function _generateTransactionData($offerItem, &$retVal) {
+        if(!array_key_exists($offerItem['offerID'], $retVal)) {
+            Core::copyArrayElements($offerItem, $retVal['transactions'][$offerItem['offerID']], "offerID, offerAdded, username, avatar, location, toUser, transactionID");
+
+            $displayName = $offerItem['firstName'];
+
+            if(strlen($offerItem['lastName']) > 0) {
+                $displayName .= " " . $offerItem['lastName'];
+            }
+
+            if(strlen($displayName) == 0) $displayName = $offerItem['username'];
+
+            $retVal['transactions'][$offerItem['offerID']]['displayName'] = $displayName;
+
+            $reviewData = Reviews::getReviewAverageForUser($offerItem['userID']);
+
+            $retVal['transactions'][$offerItem['offerID']]['starRating'] = (int)$reviewData['rating'];
+
+            //Insert state string
+            $offerItem['rejected'] = (int)$offerItem['rejected'];
+            if($offerItem['rejected'] == 0 && is_null($offerItem['endedAt'])) {
+                //Pending
+                $retVal['transactions'][$offerItem['offerID']]['pending'] = true;
+            } elseif($offerItem['rejected'] == 0 && !is_null($offerItem['endedAt'])) {
+                //Accepted
+                $retVal['transactions'][$offerItem['offerID']]['accepted'] = true;
+            } elseif($offerItem['rejected'] == 1 && !is_null($offerItem['endedAt'])) {
+                //Declined
+                $retVal['transactions'][$offerItem['offerID']]['declined'] = true;
+            }
+
+            //Get target item
+            if($targetItem = Items::getItemWithThumb($offerItem['offerItemID'])) {
+                $targetItem['itemID'] = $targetItem['id']; //Ugh.
+                $targetItem['quantity'] = $offerItem['forQuantity'];
+                Core::copyArrayElements($targetItem, $retVal['transactions'][$offerItem['offerID']]['forItem']['items'][0], "itemID, name, description, url, quantity");
+            } else throw new RestException(500, "Failed to retrieve target item.");
+        }
+
+        //Copy item data into offer array
+        Core::copyArrayElements($offerItem, $retVal['transactions'][$offerItem['offerID']]['offers']['items'], "itemID, name, description, url, quantity", null, true);
+    }
+
+    private function _getTransactionTimeframe(&$time) {
+        //Determine which time frame we should return
+        switch($time) {
+            case 0:
+                //Today
+                $time = strtotime("00:00"); //Seconds since midnight
+                break;
+
+            case 1:
+                //Past Week
+                $time = strtotime("-1 week");
+                break;
+
+            case 2:
+                //Past Month
+                $time = strtotime("-1 month");
+                break;
+
+            case 3:
+                //Past 3 Months
+                $time = strtotime("-3 months");
+                break;
+
+            case 4:
+                //Past 6 Months
+                $time = strtotime("-6 months");
+                break;
+
+            case 5:
+                //Past Year
+                $time = strtotime("-1 year");
+                break;
+
+            default: //Yes, gross. Get over it.
+            case 6:
+                //All Time
+                $time = null;
+                break;
+        }
+    }
+} 

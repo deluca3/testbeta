@@ -1,0 +1,134 @@
+
+/**
+ * Copyright 2014 Trade On Up LLC.
+ * Originally written by Gage on 4/17/14
+ */
+
+namespace TradeOnUp\Core;
+
+use RequestEnvelope;
+use Receiver;
+use ReceiverList;
+use PayRequest;
+use AdaptivePaymentsService;
+
+class PayPal {
+    const PP_DEBUG_MODE = true; //Do we use production PayPal servers or not?
+    const PP_PERCENTAGE_FEE = .05; //5% is what TOU takes.
+    const PP_TOU_EMAIL = "stephen.deluca-facilitator@tradeonup.com"; //Where the fee goes.
+
+    public static function createFeePayment($total, $targetEmail, $offerIDHash, $cancelUrl, $returnUrl) {
+        $total = (double)$total;
+        $fee = $total * self::PP_PERCENTAGE_FEE;
+
+        $requestEnvelope = new RequestEnvelope("en_US");
+
+        $receiver = [];
+        $receiver[0] = new Receiver();
+
+        // A receiver's email address
+        $receiver[0]->email = $targetEmail;
+
+        // Amount to be credited to the receiver's account
+        $receiver[0]->amount = $total;
+
+        // Set to true to indicate a chained payment; only one receiver can be a
+        // primary receiver. Omit this field, or set it to false for simple and
+        // parallel payments.
+        $receiver[0]->primary = true;
+
+        $receiver[1] = new Receiver();
+        // A receiver's email address
+        $receiver[1]->email = self::PP_TOU_EMAIL;
+
+        // Amount to be credited to the receiver's account
+        $receiver[1]->amount = $fee;
+
+        // Set to true to indicate a chained payment; only one receiver can be a
+        // primary receiver. Omit this field, or set it to false for simple and
+        // parallel payments.
+        $receiver[1]->primary = false;
+
+        $receiverList = new ReceiverList($receiver);
+        $payRequest = new PayRequest($requestEnvelope, "PAY", $cancelUrl, "USD", $receiverList, $returnUrl);
+
+        $payRequest->feesPayer = "PRIMARYRECEIVER";
+        $payRequest->payKeyDuration = "P3D"; //3 Days
+
+        // The URL to which you want all IPN messages for this payment to be
+        // sent.
+        // This URL supersedes the IPN notification URL in your profile
+        $payRequest->ipnNotificationUrl = "http://alpha.tradeonup.com:81/paypal/ppIpn.php";
+
+        //OfferID hash in the request
+        $payRequest->trackingId = $offerIDHash;
+
+        $config = [];
+
+        if(self::PP_DEBUG_MODE) {
+            $config = [
+                'mode' => 'sandbox',
+                'acct1.UserName' => 'stephen.deluca-facilitator_api1.tradeonup.com',
+                'acct1.Password' => '1395856493',
+                'acct1.Signature' => 'AFcWxV21C7fd0v3bYYYRCpSSRl31AW0S5-iR8WTOtkDk-2XWHe-OOUnU',
+                'acct1.AppId' => 'APP-80W284485P519543T'
+            ];
+        } else { //TODO: Production creds
+            $config = [
+                'mode' => 'sandbox',
+                'acct1.UserName' => 'stephen.deluca-facilitator_api1.tradeonup.com',
+                'acct1.Password' => '1395856493',
+                'acct1.Signature' => 'AFcWxV21C7fd0v3bYYYRCpSSRl31AW0S5-iR8WTOtkDk-2XWHe-OOUnU',
+                'acct1.AppId' => 'APP-80W284485P519543T'
+            ];
+        }
+
+        // ## Creating service wrapper object
+        // Creating service wrapper object to make API call and loading
+        // configuration file for your credentials and endpoint
+        $service = new AdaptivePaymentsService($config);
+
+
+        // ## Making API call
+        // Invoke the appropriate method corresponding to API in service
+        // wrapper object
+        $response = $service->Pay($payRequest);
+
+        // ## Accessing response parameters
+        // You can access the response parameters in
+        // response object as shown below
+        // ### Success values
+        if ($response->responseEnvelope->ack == "Success")
+        {
+
+            // The pay key, which is a token you use in other Adaptive
+            // Payment APIs (such as the Refund Method) to identify this
+            // payment. The pay key is valid for 3 hours; the payment must
+            // be approved while the pay key is valid.
+
+            if(self::PP_DEBUG_MODE) {
+                return [
+                    "url" => "https://www.sandbox.paypal.com/cgi-bin/webscr?cmd=_ap-payment&paykey=" . $response->payKey,
+                    "key" => $response->payKey
+                ];
+            } else { //TODO: Change to production URL
+                return [
+                    "url" => "https://www.sandbox.paypal.com/cgi-bin/webscr?cmd=_ap-payment&paykey=" . $response->payKey,
+                    "key" => $response->payKey
+                ];
+            }
+
+            // Once you get success response, user has to redirect to PayPal
+            // for the payment. Construct redirectURL as follows,
+            // `redirectURL=https://www.sandbox.paypal.com/cgi-bin/webscr?cmd=_ap-payment&paykey="
+            // + $response->payKey`
+        }
+        else{
+            if(self::PP_DEBUG_MODE) {
+                Log::logToFile("paypal", $response->error[0]->message);
+            }
+        }
+
+        return null;
+    }
+} 

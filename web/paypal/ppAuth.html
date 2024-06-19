@@ -1,0 +1,94 @@
+
+/**
+ * Copyright 2014 Trade On Up LLC.
+ * Originally written by Gage on 4/25/14
+ */
+set_include_path(get_include_path() . PATH_SEPARATOR . '/tou/web/');
+
+require("includes/Database.php");
+require("includes/model/Model.php");
+require("includes/model/Users.php");
+use TradeOnUp\Models\Users;
+
+const DEBUG_MODE = true;
+
+session_start();
+
+if(!$_SESSION['auth']) {
+    die("No valid session, please login again.");
+}
+
+$authCode = $_GET['code'];
+
+//Production
+$clientID = "ARbfTxCqAefOA-zSrcc21L2V6gxkgBbx4WXe-WoIZ-cqGCmGGu-M-Yt5W7ja";
+$secret = "EMTVVhDsJ0PjH2grLlnMV0LS0j3jeGFdhcv4FcGQYShCwg9uYHluakjPfV7d";
+$baseUrl = "https://api.paypal.com";
+
+if(DEBUG_MODE) {
+    //Debug
+    $clientID = "AWkPuRBVM1GHhr_nJNQoyF2L0WsWGclWHMZuJYyaGZz-7CDZLQewimlPZU_J";
+    $secret = "EAqIwhBxyKXyHfcQsEDhPchlblgdw0-JGvtqBlgA0oUofmhwCl-KWFb2T-dV";
+    $baseUrl = "https://api.sandbox.paypal.com";
+}
+
+//First get an access token
+$ch = curl_init("{$baseUrl}/v1/identity/openidconnect/tokenservice");
+
+$postData = urlencode('grant_type') . '=' . urlencode('authorization_code') .
+    '&' . urlencode('code') . '=' . urlencode($authCode) .
+    '&' . urlencode('redirect_uri') . '=' . urlencode('http://alpha.tradeonup.com:81/paypal/ppAuth.php');
+
+curl_setopt($ch, CURLOPT_USERPWD, "{$clientID}:{$secret}");
+curl_setopt($ch, CURLOPT_POSTFIELDS, $postData);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+$output = curl_exec($ch);
+curl_close($ch);
+
+$output = json_decode($output, true);
+$accessToken = $output['access_token'];
+
+if(!$accessToken) die("Failed to retrieve access token.");
+
+//Then retrieve the data we need
+$ch = curl_init("{$baseUrl}/v1/identity/openidconnect/userinfo/?schema=openid");
+
+curl_setopt($ch, CURLOPT_HTTPHEADER, [
+    "Content-Type:application/json",
+    "Authorization: Bearer {$accessToken}"
+]);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+$output = curl_exec($ch);
+curl_close($ch);
+
+$output = json_decode($output, true);
+
+if(isset($output['email'])) {
+    $userUpdate = [
+        "id" => $_SESSION['userID'],
+        "paypalEmail" => $output['email']
+    ];
+
+    if(Users::update($userUpdate, "paypalEmail")) {
+        echo "Done.
+            <script>
+                window.onunload = function() {
+                    var win = window.opener;
+                    if (!win.closed) {
+                        win.paypalWndClose('{$output['email']}');
+                    }
+                };
+
+                window.close();
+            </script>
+        ";
+    } else {
+        die("Failed to update information.");
+    }
+}
+
+
+
+

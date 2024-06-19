@@ -1,0 +1,454 @@
+
+/**
+ * Copyright 2013 Trade On Up LLC.
+ * Originally written by Gage on 10/21/13
+ */
+
+namespace TradeOnUp\API;
+
+use Luracast\Restler\RestException;
+use Luracast\Restler\User;
+use TradeOnUp\Core\Core;
+use TradeOnUp\Core\Database;
+use TradeOnUp\Core\HashID;
+use TradeOnUp\Core\Log;
+use TradeOnUp\Core\Mail;
+use TradeOnUp\Core\PayPal;
+use TradeOnUp\Models\Items;
+use TradeOnUp\Models\Notifications;
+use TradeOnUp\Models\Offers as offersModel;
+use TradeOnUp\Models\OfferLists;
+use TradeOnUp\Core\Validate;
+use TradeOnUp\Models\PayPalTransactions;
+use TradeOnUp\Models\Reviews;
+use TradeOnUp\Models\Transactions;
+use TradeOnUp\Models\Feeds;
+use TradeOnUp\Models\Users;
+
+class Offers {
+
+    protected function postAccept($request_data = null) {
+        if(!isset($request_data['itemID']) || !isset($request_data['offerID'])) {
+            throw new RestException(412, "Missing parameters");
+        }
+
+        $db = Database::getInstance();
+        $hashIds = HashID::getInstance();
+
+        $itemID = $hashIds->decrypt($request_data['itemID']);
+        $offerID = $hashIds->decrypt($request_data['offerID']);
+
+        $db->begin_transaction();
+
+        if($itemData = Validate::itemOwner($itemID, $_SESSION['userID'])) {
+            if($offerData = Validate::offerOwner($offerID, $_SESSION['userID'])) {
+                //Both item and offer belong to the user, proceed.
+
+                if($offerData['itemID'] != $itemData['id']) {
+                    throw new RestException(403, "This offer was not made for specified item.");
+                }
+
+                //Make sure the item is still available.
+                if(!is_null($itemData['endedAt'])) {
+                    throw new RestException(403, "This item is no longer available.");
+                }
+
+                //Ensure the offer hasn't already been previously rejected.
+                if($offerData['rejected'] != 0) {
+                    throw new RestException(403, "This offer has already been rejected.");
+                }
+
+                if($offerData['quantity'] <= $itemData['quantity']) {
+                    if(!$this->_updateItemQuantities($offerID)) {
+                        throw new RestException(403, "The offer was found to be invalid.");
+                    }
+
+                    //Add new transaction
+                    $newTransaction = [
+                        "itemID" => $itemData['id'],
+                        "userID" => $offerData['userID'],
+                        "offerUserID" => $offerData['offerUserID'],
+                        "offerID" => $offerData['id'],
+                        "quantity" => $offerData['quantity'],
+                        "tradedAt" => Core::mysqlTimestamp()
+                    ];
+
+                    if($transactionID = Transactions::insert($newTransaction)) {
+                        $itemData['quantity'] -= $offerData['quantity'];
+
+                        if($itemData['quantity'] <= 0) {
+                            $itemData['endedAt'] = Core::mysqlTimestamp();
+                        }
+
+                        if(Items::update($itemData, "quantity, endedAt")) {
+                            //Close out offer
+                            $offerUpdate = [
+                                "id" => $offerData['id'],
+                                "transactionID" => $transactionID,
+                                "endedAt" => Core::mysqlTimestamp()
+                            ];
+
+                            if(offersModel::update($offerUpdate, "endedAt, transactionID")) {
+                                //Add notification for transaction completion.
+                                if(Notifications::addTransactionNotification($offerData['offerUserID'], $transactionID, $offerData['userID'], $offerData['itemID'])) {
+                                    //Notification added TODO: Error checking
+                                }
+
+                                //Add feed items.
+                                if(Feeds::addTransaction($_SESSION['userID'], $offerData['offerUserID'], $offerData['id'], $offerData['userID'], $itemData['id']))
+                                {
+                                    //Feed item added TODO: Error checking
+                                }
+
+                                $db->commit();
+
+                                return true;
+                            } else throw new RestException(500, "Offers: Database failure.");
+                        } else throw new RestException(500, "Items: Database failure.");
+                    } else throw new RestException(500, "Transactions: Database failure.");
+
+                } else throw new RestException(403, "Offer quantity exceeds remaining item quantity.");
+
+            } else throw new RestException(400, "Offer ownership invalid.");
+        } else throw new RestException(400, "Item ownership invalid.");
+    }
+
+    protected function postReject($offerID) {
+        if(isset($offerID)) {
+            $hashIDs = HashID::getInstance();
+            $offerID = $hashIDs->decrypt($offerID);
+
+            if($offerData = Validate::offerOwner($offerID, $_SESSION['userID'])) {
+                if($itemData = Validate::itemOwner($offerData['itemID'], $_SESSION['userID'])) {
+                    if(!is_null($itemData['endedAt'])) {
+                        throw new RestException(400, "Item listing has ended.");
+                    }
+
+                    $updatedOffer = [
+                        "id" => $offerData['id'],
+                        "rejected" => 1,
+                        "rejectReason" => "User reject",
+                        "endedAt" => Core::mysqlTimestamp()
+                    ];
+
+                    if(offersModel::update($updatedOffer, "rejected, rejectReason, endedAt")) {
+                        return true;
+                    } else throw new RestException(500, "Database failure.");
+                } else throw new RestException(403, "Item ownership invalid");
+            } else throw new RestException(403, "Offer ownership invalid");
+        } else throw new RestException(412, "Missing parameters");
+    }
+
+    protected function postCashOffer($request_data = null) {
+        //Stub
+    }
+
+    protected function postBuy($request_data = null) {
+        $itemID = $request_data['itemID'];
+        $quantity = (int)$request_data['quantity'];
+
+        if(!isset($request_data['itemID']) || !isset($request_data['quantity'])) {
+            throw new RestException(412, "Missing parameters");
+        }
+
+        $db = Database::getInstance();
+        $hashIDs = HashID::getInstance();
+
+        $itemID = $hashIDs->decrypt($itemID);
+
+        $db->begin_transaction();
+
+        if(!($targetItem = Items::getById($itemID))
+            || $targetItem['listed'] != 1
+            || $targetItem['userID'] == $_SESSION['userID']
+            || is_null($targetItem['buyNow'])) {
+
+            throw new RestException(400, "Invalid target item.");
+        }
+
+        if(!is_null($targetItem['endedAt'])) {
+            throw new RestException(403, "Item listing has ended.");
+        }
+
+        if($quantity > (int)$targetItem['quantity']
+            || $quantity < 1) {
+            throw new RestException(500, "Invalid target quantity.");
+        }
+
+        $returnUrl = "http://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]";
+        $cancelUrl = "http://$_SERVER[HTTP_HOST]$_SERVER[REQUEST_URI]";
+        $totalCash = (double)$targetItem['buyNow'] * $quantity;
+        $ppPayKey = null;
+
+        //Get item owner user info
+        if(!($user = Users::getById($targetItem['userID']))) {
+            throw new RestException(500, "Unable to retrieve item owner user data.");
+        }
+
+        //Ensure we got a valid PayPal email
+        if(is_null($user['paypalEmail'])) {
+            throw new RestException(500, "Unable to retrieve item owner payment data.");
+        }
+
+        //Create new buyout offer
+        $newOffer = [
+            "offerUserID" => $_SESSION['userID'],
+            "userID" => $targetItem['userID'],
+            "itemID" => $targetItem['id'],
+            "buyOut" => $totalCash,
+            "quantity" => $quantity,
+            "addedAt" => Core::mysqlTimestamp()
+        ];
+
+        //Insert offer
+        if(!($offerID = offersModel::insert($newOffer))) {
+            throw new RestException(500, "Offer: Database failure.");
+        }
+
+        //Try PayPal 3 times.
+        for($ppRetry = 0; $ppRetry < 3; $ppRetry++) {
+            //Create PayPal payment
+            if($ppPayKey = PayPal::createFeePayment($totalCash, $user['paypalEmail'], $hashIDs->encrypt($offerID), $returnUrl, $cancelUrl)) {
+                break;
+            }
+
+            if($ppRetry == 2) {
+                throw new RestException(500, "Unable to create PayPal payment.");
+            }
+
+            sleep(2); //egh
+        }
+
+        //Update offer
+        $offerUpdate = [
+            "id" => $offerID,
+            "ppPayKey" => $ppPayKey['key']
+        ];
+
+        if(!(offersModel::update($offerUpdate, "ppPayKey"))) {
+            throw new RestException(500, "OfferU: Database failure.");
+        }
+
+        $ppTransaction = [
+            "ppPayKey" => $ppPayKey['key'],
+            "status" => "PENDING"
+        ];
+
+        if(!(PayPalTransactions::insert($ppTransaction))) {
+            throw new RestException(500, "PP: Database failure.");
+        }
+
+        $targetItem['quantity'] -= $quantity;
+
+        if($targetItem['quantity'] <= 0) {
+            $targetItem['endedAt'] = Core::mysqlTimestamp();
+        }
+
+        if(Items::update($targetItem, "quantity, endedAt")) {
+            //TODO: Notifications / feed items
+
+            $db->commit();
+
+            return ["url" => $ppPayKey['url']];
+        } else throw new RestException(500, "Item: Database failure.");
+    }
+
+    protected function get($itemID) {
+        if(isset($itemID)) {
+            $hashIDs = HashID::getInstance();
+            $itemID = $hashIDs->decrypt($itemID);
+
+            if($itemData = Validate::itemOwner($itemID, $_SESSION['userID'])) {
+                if($offerItems = offersModel::getOfferItemsForItem($itemID)) {
+                    $retVal = [];
+
+                    foreach($offerItems as $offerItem) {
+                        if(!array_key_exists($offerItem['offerID'], $retVal)) {
+                            Core::copyArrayElements($offerItem, $retVal[$offerItem['offerID']], "offerID, offerAdded, username, avatar, location, forQuantity");
+
+                            $displayName = $offerItem['firstName'];
+
+                            if(strlen($offerItem['lastName']) > 0) {
+                                $displayName .= " " . $offerItem['lastName'];
+                            }
+
+                            if(strlen($displayName) == 0) $displayName = $offerItem['username'];
+
+                            $retVal[$offerItem['offerID']]['displayName'] = $displayName;
+
+                            $reviewData = Reviews::getReviewAverageForUser($offerItem['id']);
+
+                            $retVal[$offerItem['offerID']]['starRating'] = (int)$reviewData['rating'];
+                        }
+
+                        Core::copyArrayElements($offerItem, $retVal[$offerItem['offerID']]['items'], "itemID, name, description, url, quantity", null, true);
+                    }
+
+                    $retVal = array_values($retVal);
+
+                    //Hash IDs
+                    $retVal = $hashIDs->encrypt_keys($retVal, "offerID, itemID");
+
+                    return $retVal;
+                } else throw new RestException(404, "No offers for item");
+            } else throw new RestException(403, "Ownership invalid");
+        } else throw new RestException(412, "Missing parameters");
+    }
+
+    protected function post($request_data = null) {
+        if(isset($request_data['itemID']) && isset($request_data['offers']) && isset($request_data['qty'])) {
+            $db = Database::getInstance();
+            $hashIDs = HashID::getInstance();
+            $itemID = $hashIDs->decrypt($request_data['itemID']);
+
+            $offerIDs = [];
+            foreach($request_data['offers'] as $offer) {
+                if(isset($offer['id'])) {
+                    $offerIDs[] = $offer['id'];
+                }
+            }
+
+            $offerIDs = $hashIDs->decrypt_multi($offerIDs);
+
+            $db->begin_transaction();
+
+            //Check number of offers made on this item so far, confirm below limit
+            if(offersModel::getNumOffersByUser($_SESSION['userID'], $itemID) >= 3) {
+                throw new RestException(400, "Maximum active offers for item reached");
+            }
+
+            //Make sure the parameters are valid
+            if($itemID <= 0 || !is_array($offerIDs)) {
+                throw new RestException(412, "Invalid parameters");
+            }
+
+            if(($targetItem = Items::getById($itemID))
+                && $targetItem['listed'] == 1
+                && $targetItem['userID'] != $_SESSION['userID']) {
+
+                if(!is_null($targetItem['endedAt'])) {
+                    throw new RestException(403, "Item listing has ended.");
+                }
+
+                if((int)$request_data['qty'] > (int)$targetItem['quantity']
+                    || (int)$request_data['qty'] < 1) {
+                    throw new RestException(500, "Invalid target quantity.");
+                }
+
+                if($offerItems = Validate::itemOwner($offerIDs, $_SESSION['userID'])) {
+                    //Create new offer
+                    $newOffer = [
+                        "offerUserID" => $_SESSION['userID'],
+                        "userID" => $targetItem['userID'],
+                        "itemID" => $targetItem['id'],
+                        "quantity" => isset($request_data['qty']) ? (int)$request_data['qty'] : 1,
+                        "addedAt" => Core::mysqlTimestamp()
+                    ];
+
+                    //Insert offer
+                    if(($offerID = offersModel::insert($newOffer)) && $offerID > 0) {
+                        //Create offer list rows
+                        $offerList = [];
+
+                        foreach($offerItems as $index => $offerItem) {
+                            $offerListRow = [
+                                "offerID" => $offerID,
+                                "offerItemID" => $offerIDs[$index],
+                                "quantity" => isset($request_data['offers'][$index]['qty']) ? (int)$request_data['offers'][$index]['qty'] : 1
+                            ];
+
+                            $offerList[] = $offerListRow;
+                        }
+
+                        //Insert offer list rows
+                        if(OfferLists::insertMultiple($offerList)) {
+                            //Everything went well, now let's add a notification.
+                            if(Notifications::addOfferNotification($targetItem['userID'], $_SESSION['userID'], $targetItem['id'])) {
+                                //Notification was added. TODO: Make this handle failure more intelligently
+                            }
+
+                            $db->commit();
+
+                            return true;
+                        } else {
+                            $db->rollback();
+                            throw new RestException(500, "Database failure");
+                        }
+                    } else throw new RestException(500, "Database failure");
+                } else throw new RestException(403, "Ownership invalid");
+            } else throw new RestException(404, "Invalid target item");
+        } else throw new RestException(412, "Missing parameters");
+    }
+
+    private function _updateItemQuantities($offerID) {
+        if($offerList = OfferLists::getByField($offerID, "offerID")) {
+            $itemIDs = [];
+            $offerData = [];
+
+            foreach($offerList as $offerListItem) {
+                $itemIDs[] = $offerListItem['offerItemID'];
+                $offerData[$offerListItem['offerItemID']] = $offerListItem;
+            }
+
+            if(sizeof($itemIDs) > 0) {
+                if($offerItems = Items::getItemsForIds($itemIDs)) {
+                    $offerValid = true;
+
+                    foreach($offerItems as $offerItem) {
+                        if($offerData[$offerItem['id']]['quantity'] < $offerItem['quantity']) {
+                            //We have enough, proceed.
+
+                            $offerItem['quantity'] -= $offerData[$offerItem['id']]['quantity'];
+
+                            if(Items::update($offerItem, "quantity")) {
+                                continue;
+                            } else throw new RestException(500, "OfferQty: Database failure.");
+                        } elseif($offerData[$offerItem['id']]['quantity'] == $offerItem['quantity']) {
+                            //We have exactly enough. We'll have to close out this item.
+                            $offerItem['quantity'] = 0;
+                            $offerItem['endedAt'] = Core::mysqlTimestamp();
+
+                            if(Items::update($offerItem, "quantity, endedAt")) {
+                                continue;
+                            } else throw new RestException(500, "Ended Item: Database failure.");
+                        } else { //An item doesn't have the proper quantity to continue.
+                            $offerValid = false;
+                            break;
+                        }
+                    }
+
+                    if($offerValid) {
+                        $this->_closeInvalidatedOffers($itemIDs, $offerID);
+                    }
+
+                    return $offerValid;
+                }
+            }
+        } else throw new RestException(500, "Database failure.");
+
+        return false;
+    }
+
+    private function _closeInvalidatedOffers($itemIDs, $offerID) {
+        if($offers = OfferLists::getOffersWithItems($itemIDs)) {
+            foreach($offers as $offer) {
+                if($offer['quantity'] > $offer['itemQty'] && $offer['offerID'] != $offerID) {
+                    //Close offer as it exceeds remaining quantity.
+
+                    $closedOffer = [
+                        "id" => $offer['offerID'],
+                        "endedAt" => Core::mysqlTimestamp(),
+                        "rejected" => 1,
+                        "rejectReason" => "Accepted another offer."
+                    ];
+
+                    if(offersModel::update($closedOffer, "endedAt, rejected, rejectReason")) {  //TODO: Single query update if possible?
+                        continue;
+                    } else throw new RestException(500, "Close invalid offers: Database failure.");
+                }
+            }
+        }
+
+        return true;
+    }
+}

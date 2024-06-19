@@ -1,0 +1,102 @@
+
+
+namespace TradeOnUp\Core;
+
+class Database extends \mysqli {
+    private static $database;
+
+    public function __construct() {
+        //parent::__construct("toudevdb.ckmpoukpz6vt.us-east-1.rds.amazonaws.com", "touUser", "Trad34l1f3!", "tradeOnUp"); //Terrible credentials, also: TODO: config file outside webroot, limited access credentials.
+        parent::__construct("127.0.0.1", "root", "tr@de0nup", "tradeOnUp");
+
+        if ($this->connect_error) {
+            die('Database Connection Error (' . $this->connect_errno . ') ' . $this->connect_error);
+        }
+    }
+
+    //Yeaaa singleton
+    public static function getInstance() {
+        if(!self::$database) {
+            self::$database = new Database();
+        }
+
+        self::$database->set_charset("utf8");
+
+        return self::$database;
+    }
+
+    public function real_escape_string($toEscape) {
+        return parent::real_escape_string(trim($toEscape));
+    }
+
+    public function queryInsert($queryString) {
+        $this->query($queryString);
+
+        return $this->insert_id == 0 ? false : $this->insert_id;
+    }
+
+    public function queryAffected($queryString) {
+        $this->query($queryString);
+
+        return $this->affected_rows <= 0 ? false : $this->affected_rows;
+    }
+
+    public function queryMultipleRows($queryString) {
+        $result = $this->query($queryString);
+        $rows = null;
+
+        if($result && $result->num_rows > 0) {
+            while($row = $result->fetch_assoc()) {
+                $rows[] = $row;
+            }
+        }
+
+        return $rows;
+    }
+
+    public function querySingleRow($queryString) {
+        $result = $this->query($queryString);
+        $row = null;
+
+        if($result && $result->num_rows > 0) {
+            $row = $result->fetch_assoc();
+        }
+
+        return $row;
+    }
+
+    public function querySingleValue($queryString) {
+        $result = $this->query($queryString);
+        $row = null;
+
+        if($result && $result->num_rows > 0) {
+            $row = $result->fetch_assoc();
+        }
+
+        return $row ? reset($row) : null;
+    }
+
+
+    //TODO: Make this work, switch things over so we don't risk SQL injection.
+    /*function prepared_query($queryString, $typeDef, $dataVals){
+        if ($stmt = $this->prepare($queryString)) {
+
+            for($i=0; $i < strlen($typeDef) - 1; $i++) {
+                 // bind parameters for markers
+                 $stmt->bind_param("s", $city);
+            }
+
+            // execute query
+            $stmt->execute();
+
+            // bind result variables
+            $stmt->bind_result($district);
+
+            // fetch value
+            $stmt->fetch();
+
+            // close statement
+            $stmt->close();
+        }
+    }*/
+}

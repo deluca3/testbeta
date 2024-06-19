@@ -1,0 +1,1 @@
+<b>{fromUser}</b> accepted your offer for their <b>{itemName}</b>

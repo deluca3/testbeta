@@ -1,0 +1,44 @@
+
+/**
+ * Copyright 2013 Trade On Up LLC.
+ * Originally written by Gage on 11/1/13
+ */
+
+namespace TradeOnUp\Core;
+
+require("/tou/includes/bbcode/BBCodeDefinitions.php");
+require("/tou/includes/bbcode/BBCodeEmoticons.php");
+
+use JBBCode\Parser;
+use TradeOnUp\Core\BBCode\BBCodeDefinitions;
+use TradeOnUp\Core\BBCode\BBCodeEmoticons;
+
+class BBCode {
+    private $parser;
+
+    public function __construct($bbcode)
+    {
+        //Replace emoticons
+        $emoticons = new BBCodeEmoticons($bbcode);
+        $bbcode = $emoticons->asHtml();
+
+        $bbcode = nl2br($bbcode);
+
+        //BBCode parsing
+        $this->parser = new Parser();
+
+        $this->parser->addCodeDefinitionSet(new BBCodeDefinitions());
+
+        $this->parser->parse($bbcode); //Initial parse
+        $this->parser->parse($this->parser->getAsBBCode()); //Closes unclosed bbcode tags
+    }
+
+    public function asHtml() {
+        return $this->stripBBCode($this->parser->getAsHTML());
+    }
+
+    private function stripBBCode($text_to_search) {
+        $pattern = '|[[\/\!]*?[^\[\]]*?]|si';
+        return preg_replace($pattern, '', $text_to_search);
+    }
+}

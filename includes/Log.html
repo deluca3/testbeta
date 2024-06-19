@@ -1,0 +1,55 @@
+
+
+namespace TradeOnUp\Core;
+
+class Log {
+    //Logging level constants
+    const DEBUG = "DEBUG";
+    const INFO = "INFO";
+    const WARN = "WARN";
+    const CRITICAL = "CRITICAL";
+
+    private static $defaultLocation = "/var/log/tou/"; //Include slash at the end for this to work correctly.
+
+    /**
+     * @param string $filename Filename to write log messages to
+     * @param mixed $logMsg Message to write to log
+     * @param string $logLevel Log level (can be custom string) set using class constants by default.
+     * @return bool True if the message was written to the target file.
+     */
+    public static function logToFile($filename, $logMsg, $logLevel = self::INFO) {
+        //If we get an array, turn it into pretty-printed var_dump output
+        if(isset($logMsg) && is_array($logMsg)) {
+            ob_start();
+            var_dump($logMsg);
+            $logMsg = ob_get_clean();
+        }
+
+        if(isset($logMsg) && strlen($logMsg) > 0) {
+            //Put in default location if we aren't given a full path.
+            if(strncmp($filename, "/", 1)) {
+                $filename = self::$defaultLocation . $filename;
+            }
+
+            //Create the file if it doesn't exist already.
+            if(!file_exists($filename)) {
+                touch($filename);
+            }
+
+            $finalMsg = sprintf("[%s]\t%s:\t%s\n", strtoupper($logLevel), date(DATE_RFC822), $logMsg);
+
+            return (bool)file_put_contents($filename, $finalMsg, FILE_APPEND);
+        }
+
+        return false;
+    }
+
+    /**
+     * @param mixed $logMsg Message to write to log
+     * @param string $logLevel Log level (can be custom string) set using class constants by default.
+     * @return bool True if the message was written to the master log
+     */
+    public static function logToMaster($logMsg, $logLevel = self::INFO) {
+        return self::logToFile(self::$defaultLocation . "TradeOnUp.log", $logMsg, $logLevel);
+    }
+}

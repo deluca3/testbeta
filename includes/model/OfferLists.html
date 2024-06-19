@@ -1,0 +1,70 @@
+
+/**
+ * Copyright 2013 Trade On Up LLC.
+ * Originally written by Gage on 10/21/13
+ */
+
+namespace TradeOnUp\Models;
+
+use TradeOnUp\Core\Database;
+use TradeOnUp\Models\Users;
+
+class OfferLists extends Model {
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Lookup Functions
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    public static function getOffersWithItems($ids) {
+        $db = Database::getInstance();
+        $rows = null;
+        $whereClause = null;
+
+        if(is_numeric($ids)) {
+            $whereClause = "ol.offerItemID = '$ids'";
+        } elseif(is_array($ids)) {
+            $whereClause = 'ol.offerItemID IN (';
+
+            foreach($ids as $id) {
+                $whereClause .= (int)$id . ", ";
+            }
+
+            $whereClause = rtrim($whereClause, ", ");
+            $whereClause .= ")";
+        }
+
+        if(!is_null($whereClause)) {
+            $rows = $db->queryMultipleRows("SELECT ol.offerItemID as `itemID`, ol.offerID, ol.quantity, i.quantity as `itemQty`
+                                            FROM OfferLists ol LEFT JOIN Items i ON ol.offerItemID = i.id
+                                            LEFT JOIN Offers o ON ol.offerID = o.id WHERE $whereClause AND o.endedAt IS NULL");
+        }
+
+        if(is_array($rows)) {
+            return $rows;
+        }
+
+        return null;
+    }
+
+    public static function getOfferItemsForTransaction($transactionID) {
+        $db = Database::getInstance();
+
+        $transactionID = (int)$transactionID;
+
+        $rows = $db->queryMultipleRows("SELECT i.*, u.*, ii.url, ol.quantity, i.id as itemID, t.id as transactionID, t.itemID as transactionItemID,
+                                        t.userID as transactionUserID, t.offerUserID
+                                        FROM OfferLists ol
+                                        LEFT JOIN Items i ON ol.offerItemID = i.id
+                                        LEFT JOIN ItemImages ii ON ii.id = i.thumbImageID
+                                        LEFT JOIN Offers o ON ol.offerID = o.id
+                                        LEFT JOIN Transactions t ON t.offerID = o.id
+                                        LEFT JOIN Users u ON t.offerUserID = u.id
+                                        WHERE t.id = '$transactionID'");
+
+        if(is_array($rows)) {
+            return $rows;
+        }
+
+        return null;
+    }
+}

@@ -1,0 +1,314 @@
+
+/**
+ * Copyright 2013 Trade On Up LLC.
+ * Originally written by Gage on 11/19/13
+ */
+
+namespace TradeOnUp\Models;
+
+use TradeOnUp\Core\Core;
+use TradeOnUp\Core\Database;
+use TradeOnUp\Core\HashID;
+use TradeOnUp\Models\Users;
+use TradeOnUp\Models\Items;
+use TradeOnUp\Models\Offers;
+use TradeOnUp\Core\Log;
+
+class Feeds extends Model {
+
+    public static function getActivityFeedForUser($userID, $owner = false) {
+        $db = Database::getInstance();
+
+        $userID = (int)$userID;
+
+        if($owner) {
+            $feedItems = $db->queryMultipleRows("SELECT f.id, f.type, f.metadata, UNIX_TIMESTAMP(f.addedAt) as addedAt
+                                                 FROM Feeds f WHERE f.userID = '$userID' GROUP BY f.hash
+                                                 ORDER BY f.addedAt DESC");
+        } else {
+            $feedItems = $db->queryMultipleRows("SELECT f.id, f.type, f.metadata, UNIX_TIMESTAMP(f.addedAt) as addedAt
+                                                 FROM Feeds f WHERE f.userID = '$userID' AND f.private = '0' GROUP BY f.hash
+                                                 ORDER BY f.addedAt DESC");
+        }
+
+        if(is_array($feedItems)) {
+            return self::gatherMetadata($feedItems);
+        }
+
+        return null;
+    }
+
+    public static function getFollowFeedForUser($userID, $owner = false) {
+        $db = Database::getInstance();
+
+        $userID = (int)$userID;
+
+        /*if($owner) {
+            $feedItems = $db->queryMultipleRows("SELECT f.id, f.type, f.metadata, UNIX_TIMESTAMP(f.addedAt) as addedAt
+                                                 FROM Feeds f WHERE f.userID = '$userID'
+                                                 ORDER BY f.addedAt DESC");
+        } else {*/
+            /*$feedItems = $db->queryMultipleRows("SELECT f.id, f.type, f.metadata, f.hash, UNIX_TIMESTAMP(f.addedAt) as addedAt
+                                                 FROM Feeds f
+                                                 WHERE f.userID IN (SELECT fo.followUserID FROM Followers fo WHERE fo.userID = '$userID')
+                                                 AND (f.metadata NOT LIKE '%ownUser\":$userID%')
+                                                 AND f.private = '0' GROUP BY f.hash
+                                                 ORDER BY f.addedAt DESC");*/
+
+            /*$myFeedItems = $db->queryMultipleRows("SELECT f.id, f.type, f.metadata, f.hash, UNIX_TIMESTAMP(f.addedAt) as addedAt
+                                                 FROM Feeds f
+                                                 WHERE f.userID = '$userID'
+                                                 AND f.private = '0' GROUP BY f.hash
+                                                 ORDER BY f.addedAt DESC");*/
+        //}
+
+        $feedItems = $db->queryMultipleRows("SELECT f.id, f.type, f.metadata, f.hash, UNIX_TIMESTAMP(f.addedAt) as addedAt
+                                             FROM Feeds f
+                                             WHERE f.userID IN (SELECT fo.followUserID FROM Followers fo WHERE fo.userID = '$userID')
+                                             OR f.userID = '$userID'
+                                             AND f.private = '0'
+                                             GROUP BY f.hash
+                                             ORDER BY f.addedAt DESC;");
+
+        //$feedItems = array_merge($feedItems, $myFeedItems);
+
+        /*usort($feedItems, function($a, $b) {
+            return $a['addedAt'] < $b['addedAt'] ? 1 : -1;
+        });*/
+
+        if(is_array($feedItems)) {
+            return self::gatherMetadata($feedItems);
+        }
+
+        return null;
+    }
+
+    private function gatherMetadata($feedItems) {
+        $hashID = HashID::getInstance();
+
+        $dataCache = [];
+
+        //TODO: This is all terrible. Need a better system.
+        foreach($feedItems as &$feedItem) {
+            $metadata = json_decode($feedItem['metadata']);
+            $finalMetadata = [];
+
+            foreach($metadata as $key => $value) {
+                $keyData = @explode("_", $key);
+
+                if(sizeof($keyData) > 1) {
+
+                    switch(strtolower($keyData[0])) {
+                        case "user":
+                            if( ($user = @$dataCache['user'][(int)$value]) || ($user = Users::getById((int)$value)) ) {
+                                if(!is_array(@$dataCache['user'][(int)$value])) {
+                                    $dataCache['user'][(int)$value] = $user;
+                                }
+
+                                if($keyData[1] == "ownUser") {
+                                    $feedItem['avatar'] = $user['avatar'];
+                                }
+
+                                $finalMetadata[$keyData[1]] = $user['username'];
+                            }
+
+                            break;
+
+                        case "item":
+                            if( ($item = @$dataCache['item'][(int)$value]) || ($item = Items::getItemWithThumb((int)$value)) ) {
+                                if(!is_array(@$dataCache['item'][(int)$value])) {
+                                    $dataCache['item'][(int)$value] = $item;
+                                }
+
+                                $finalMetadata[$keyData[1]] = $item['name'];
+                            }
+
+                            break;
+
+                        case "offer":
+                            if( ($offer = @$dataCache['offer'][(int)$value]) || ($offer = Offers::getOffer((int)$value)) ) {
+                                if(!is_array(@$dataCache['offer'][(int)$value])) {
+                                    $dataCache['offer'][(int)$value] = $offer;
+                                }
+
+                                $offer = $hashID->encrypt_keys($offer, "itemID");
+
+                                foreach($offer as $offerItem) {
+                                    Core::copyArrayElements($offerItem, $finalMetadata[$keyData[1]], "itemID, name, description, url, quantity", null, true);
+                                }
+                            }
+
+                            break;
+
+                        case "thumb":
+                            if( ($item = @$dataCache['item'][(int)$value]) || ($item = Items::getItemWithThumb((int)$value)) ) {
+                                if(!is_array(@$dataCache['item'][(int)$value])) {
+                                    $dataCache['item'][(int)$value] = $item;
+                                }
+
+                                $finalMetadata[$keyData[1]] = $item['url'];
+                            }
+
+                            break;
+
+                        case "desc":
+                            if( ($item = @$dataCache['item'][(int)$value]) || ($item = Items::getItemWithThumb((int)$value)) ) {
+                                if(!is_array(@$dataCache['item'][(int)$value])) {
+                                    $dataCache['item'][(int)$value] = $item;
+                                }
+
+                                $finalMetadata[$keyData[1]] = $item['description'];
+                            }
+
+                            break;
+
+                        default:
+                            //Huh.. how did we get here?
+                            $finalMetadata[$keyData[1]] = "Unknown Metadata";
+
+                            break;
+                    }
+
+                } else {
+                    $finalMetadata[$key] = $value;
+                }
+            }
+
+            $feedItem['metadata'] = $finalMetadata;
+        }
+
+        return $feedItems;
+    }
+
+    public static function addNote($userID, $noteMsg) { //Type 1
+        $hash = self::generateHash();
+
+        $metadata = [
+            "user_ownUser" => (int)$userID,
+            "note" => $noteMsg
+        ];
+
+        $newFeedItem = [
+            "hash" => $hash,
+            "userID" => (int)$userID,
+            "type" => 1,
+            "metadata" => json_encode($metadata),
+            "addedAt" => Core::mysqlTimestamp()
+        ];
+
+        if($feedItemID = self::insert($newFeedItem)) {
+            return $feedItemID;
+        }
+
+        return false;
+    }
+
+    public static function addTransaction($userID, $ownUser, $ownOffer, $forUser, $forItem) { //Type 2
+        $hash = self::generateHash();
+
+        $metadata = [
+            "user_ownUser" => (int)$ownUser,
+            "offer_ownOffer" => (int)$ownOffer,
+
+            "user_forUser" => (int)$forUser,
+            "item_forItem" => (int)$forItem,
+            "thumb_forThumb" => (int)$forItem,
+            "desc_forDescription" => (int)$forItem
+        ];
+
+        $mirrorMeta = [
+            "user_ownUser" => (int)$userID,
+            "offer_ownOffer" => (int)$ownOffer,
+
+            "user_forUser" => (int)$forUser,
+            "item_forItem" => (int)$forItem,
+            "thumb_forThumb" => (int)$forItem,
+            "desc_forDescription" => (int)$forItem
+        ];
+
+        $newFeedItems = [[
+            "hash" => $hash,
+            "userID" => (int)$userID,
+            "type" => 2,
+            "metadata" => json_encode($metadata),
+            "addedAt" => Core::mysqlTimestamp()
+        ], [
+            "hash" => $hash,
+            "userID" => (int)$ownUser,
+            "type" => 2,
+            "metadata" => json_encode($metadata),
+            "addedAt" => Core::mysqlTimestamp()
+        ]];
+
+        if($feedItemID = self::insertMultiple($newFeedItems)) {
+            return $feedItemID;
+        }
+
+        return false;
+    }
+
+    public static function addUpload($userID, $ownItem) { //Type 3
+        $hash = self::generateHash();
+
+        $metadata = [
+            "user_ownUser" => (int)$userID,
+            "item_ownItem" => (int)$ownItem,
+            "thumb_ownThumb" => (int)$ownItem,
+            "desc_ownDescription" => (int)$ownItem,
+            "url" => "/profile" //TODO: Make this useful.
+        ];
+
+        $newFeedItem = [
+            "hash" => $hash,
+            "userID" => (int)$userID,
+            "type" => 3,
+            "metadata" => json_encode($metadata),
+            "addedAt" => Core::mysqlTimestamp()
+        ];
+
+        if($feedItemID = self::insert($newFeedItem)) {
+            return $feedItemID;
+        }
+
+        return false;
+    }
+
+    public static function addFollow($userID, $ownUser, $forUser) { //Type 4
+        $hash = self::generateHash();
+
+        $metadata = [
+            "user_ownUser" => (int)$ownUser,
+            "user_forUser" => (int)$forUser
+        ];
+
+        $mirrorMeta = [
+            "user_ownUser" => (int)$userID,
+            "user_forUser" => (int)$forUser
+        ];
+
+        $newFeedItems = [[
+            "hash" => $hash,
+            "userID" => (int)$userID,
+            "type" => 4,
+            "metadata" => json_encode($metadata),
+            "addedAt" => Core::mysqlTimestamp()
+        ], [
+            "hash" => $hash,
+            "userID" => (int)$ownUser,
+            "type" => 4,
+            "metadata" => json_encode($mirrorMeta),
+            "addedAt" => Core::mysqlTimestamp()
+        ]];
+
+        if($feedItemID = self::insertMultiple($newFeedItems)) {
+            return $feedItemID;
+        }
+
+        return false;
+    }
+
+    private function generateHash() {
+        return sha1(uniqid("", true));
+    }
+
+} 

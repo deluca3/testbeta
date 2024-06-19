@@ -1,0 +1,173 @@
+
+/**
+ * Copyright 2013 Trade On Up LLC.
+ * Originally written by Gage on 11/19/13
+ */
+
+namespace TradeOnUp\Models;
+
+use TradeOnUp\Core\Core;
+use TradeOnUp\Core\Database;
+use TradeOnUp\Core\HashID;
+use TradeOnUp\Models\Users;
+use TradeOnUp\Models\Items;
+use TradeOnUp\Core\Log;
+
+class Notifications extends Model {
+
+    public static function getNotificationsForUser($userID) {
+        $db = Database::getInstance();
+
+        $dataCache = [];
+
+        $userID = (int)$userID;
+
+        $notifications = $db->queryMultipleRows("SELECT n.id, n.type, n.metadata, n.url, UNIX_TIMESTAMP(n.seenAt) as seenAt, UNIX_TIMESTAMP(n.addedAt) as addedAt
+                                                 FROM Notifications n WHERE n.userID = '$userID'
+                                                 ORDER BY n.addedAt DESC, n.seenAt DESC");
+
+        if(is_array($notifications)) {
+            //TODO: This is all terrible. Need a better system.
+            foreach($notifications as &$notification) {
+                $metadata = json_decode($notification['metadata']);
+                $finalMetadata = [];
+
+                foreach($metadata as $key => $value) {
+                    $keyData = @explode("_", $key);
+
+                    switch(strtolower($keyData[0])) {
+                        case "user":
+                            if( ($user = @$dataCache['user'][(int)$value]) || ($user = Users::getById((int)$value)) ) {
+                                if(!is_array(@$dataCache['user'][(int)$value])) {
+                                    $dataCache['user'][(int)$value] = $user;
+                                }
+
+                                if($keyData[1] == "fromUser") {
+                                    $notification['avatar'] = $user['avatar'];
+                                }
+
+                                $finalMetadata[$keyData[1]] = $user['username'];
+                            }
+
+                            break;
+
+                        case "item":
+                            if( ($item = @$dataCache['item'][(int)$value]) || ($item = Items::getById((int)$value)) ) {
+                                if(!is_array(@$dataCache['item'][(int)$value])) {
+                                    $dataCache['item'][(int)$value] = $item;
+                                }
+
+                                $finalMetadata[$keyData[1]] = $item['name'];
+                            }
+
+                            break;
+
+                        default:
+                            //Huh.. how did we get here?
+                            $finalMetadata[$keyData[1]] = "Unknown Metadata";
+
+                            break;
+                    }
+                }
+
+                $notification['metadata'] = $finalMetadata;
+            }
+
+            return $notifications;
+        }
+
+        return null;
+    }
+
+    public static function getUnseenCount($user) {
+        $db = Database::getInstance();
+        $whereClause = null;
+
+        if(is_string($user)) {
+            $userData = Users::getUser($user);
+
+            if(is_array($userData)) {
+                $user = $userData['id'];
+            }
+        } elseif(is_array($user) && isset($user['id']) && is_numeric($user['id'])) {
+            $user = $user['id'];
+        }
+
+        if(is_numeric($user)) {
+            $user = (int)$user;
+
+            $numNotifs = $db->querySingleValue("SELECT COUNT(n.id) FROM Notifications n WHERE n.userID = '$user' AND n.seenAt IS NULL");
+
+            return (int)$numNotifs;
+        }
+
+        return false;
+    }
+
+    public static function addMessageNotification($userID, $msgFromUserID) { //Type 1
+        $metadata = [
+            "user_fromUser" => (int)$msgFromUserID
+        ];
+
+        $newNotification = [
+            "userID" => (int)$userID,
+            "type" => 1,
+            "metadata" => json_encode($metadata),
+            "url" => "/messages", //TODO: Make message IDs linkable
+            "addedAt" => Core::mysqlTimestamp()
+        ];
+
+        if($notifID = self::insert($newNotification)) {
+            return $notifID;
+        }
+
+        return false;
+    }
+
+    public static function addOfferNotification($userID, $offerFromUserID, $forItemID) { //Type 2
+        $hashIDs = HashID::getInstance();
+
+        $metadata = [
+            "user_fromUser" => (int)$offerFromUserID,
+            "item_itemName" => (int)$forItemID
+        ];
+
+        $newNotification = [
+            "userID" => (int)$userID,
+            "type" => 2,
+            "metadata" => json_encode($metadata),
+            "url" => "/trade/" . $hashIDs->encrypt($forItemID),
+            "addedAt" => Core::mysqlTimestamp()
+        ];
+
+        if($notifID = self::insert($newNotification)) {
+            return $notifID;
+        }
+
+        return false;
+    }
+
+    public static function addTransactionNotification($userID, $transactionID, $acceptedByUserID, $forItemID) { //Type 3
+        $hashIDs = HashID::getInstance();
+
+        $metadata = [
+            "user_fromUser" => (int)$acceptedByUserID,
+            "item_itemName" => (int)$forItemID
+        ];
+
+        $newNotification = [
+            "userID" => (int)$userID,
+            "type" => 3,
+            "metadata" => json_encode($metadata),
+            "url" => "/transaction/" . $hashIDs->encrypt($transactionID),
+            "addedAt" => Core::mysqlTimestamp()
+        ];
+
+        if($notifID = self::insert($newNotification)) {
+            return $notifID;
+        }
+
+        return false;
+    }
+
+} 

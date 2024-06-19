@@ -1,0 +1,29 @@
+
+/**
+ * Copyright 2014 Trade On Up LLC.
+ * Originally written by zedle on 6/25/14
+ */
+
+require("/tou/vendor/autoload.php");
+
+use Facebook\FacebookRequestException;
+use Facebook\FacebookRequest;
+
+session_start();
+
+try {
+    $session = $helper->getSessionFromRedirect();
+} catch(FacebookRequestException $ex) {
+    // When Facebook returns an error
+} catch(\Exception $ex) {
+    // When validation fails or other local issues
+}
+if ($session) {
+    // Logged in
+
+    $request = new FacebookRequest($session, 'GET', '/me');
+    $response = $request->execute();
+    $graphObject = $response->getGraphObject();
+
+    print_r($graphObject);
+}

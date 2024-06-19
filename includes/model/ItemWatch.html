@@ -1,0 +1,55 @@
+
+/**
+ * Copyright 2013 Trade On Up LLC.
+ * Originally written by Gage on 12/2/13
+ */
+
+namespace TradeOnUp\Models;
+
+use TradeOnUp\Core\Database;
+use TradeOnUp\Core\Log;
+
+class ItemWatch extends Model {
+
+    public static function getWatchedForUser($userID) {
+        $db = Database::getInstance();
+
+        $userID = (int)$userID;
+
+        $watchItems = $db->queryMultipleRows("SELECT * FROM ItemWatch iw LEFT JOIN Items i ON iw.itemID = i.id WHERE iw.userID = '$userID' GROUP BY iw.addedOn DESC");
+
+        if(is_array($watchItems)) {
+            return $watchItems;
+        }
+
+        return null;
+    }
+
+    public static function isWatched($userID, $itemID) {
+        $db = Database::getInstance();
+
+        $userID = (int)$userID;
+        $itemID = (int)$itemID;
+
+        $watchItem = $db->querySingleRow("SELECT id FROM ItemWatch iw WHERE iw.userID = '$userID' AND iw.itemID = '$itemID' LIMIT 1");
+
+        if(is_array($watchItem)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    public static function deleteWatchForUser($userID, $itemID) {
+        $db = Database::getInstance();
+
+        $userID = (int)$userID;
+        $itemID = (int)$itemID;
+
+        if($db->queryAffected("DELETE FROM ItemWatch WHERE userID = '$userID' AND itemID = '$itemID' LIMIT 1")) {
+            return true;
+        }
+
+        return false;
+    }
+} 

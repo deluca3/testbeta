@@ -1,0 +1,98 @@
+
+$_doRedirect = true; //Will redirect to login page if non-authenticated user attempts to get here.
+include("/tou/includes/authValidate.php");
+include("/tou/includes/view/settingsRenderFunctions.php");
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Account Settings &middot; Trade On Up</title>
+    <meta name="description" content="Trade up until you get what you want">
+    <meta name="author" content="Trade On Up">
+
+    <!-- Le styles -->
+    <link href='http://fonts.googleapis.com/css?family=Open+Sans:400,300,600,700,800' rel='stylesheet' type='text/css'>
+    <link href="/css/bootstrap.css" type="text/css" rel="stylesheet">
+    <link href="/css/bootstrap-fixed.css" type="text/css" rel="stylesheet">
+
+    <link rel="stylesheet" href="/css/font-awesome.css">
+
+    <!--[if IE 7]>
+    <link rel="stylesheet" href="/css/font-awesome-ie7.css">
+    <![endif]-->
+
+    <link href="/css/typeahead.js-bootstrap.css" type="text/css" rel="stylesheet">
+    <link href="/css/bootstrap-modal-bs3patch.css" type="text/css" rel="stylesheet">
+    <link href="/css/bootstrap-modal.css" type="text/css" rel="stylesheet">
+
+    <link href="/css/tradeonup.css" type="text/css" rel="stylesheet">
+
+    <link href="/css/magnific-popup.css" type="text/css" rel="stylesheet">
+
+    <!-- IE support -->
+    <!--[if lt IE 9]>
+    <script src="/js/html5shiv.js" type="text/javascript"></script>
+    <script src="/js/respond.src.js" type="text/javascript"></script>
+    <script src="/js/core/ieFix.js" type="text/javascript"></script>
+
+    <link href="/css/tradeonup-ie.css" type="text/css" rel="stylesheet">
+    <![endif]-->
+
+    <!--[if gte IE 9]>
+    <style type="text/css">
+        .gradient {
+            filter: none !important;
+        }
+    </style>
+    <![endif]-->
+
+    <!-- Fav icon -->
+    <link rel="shortcut icon" href="/img/favicon.ico">
+</head>
+
+<body>
+
+ include("/tou/includes/view/topNav.php"); 
+
+<div class="container fixedHeaderPadding">
+    <div id="pageContainer">
+        <span id="btnPaypalLogin"></span>
+        <script src="https://www.paypalobjects.com/js/external/api.js" type="text/javascript"></script>
+        <script>
+            paypal.use( ["login"], function(login) {
+                login.render ({
+                    "appid": "AWkPuRBVM1GHhr_nJNQoyF2L0WsWGclWHMZuJYyaGZz-7CDZLQewimlPZU_J",
+                    "authend": "sandbox", //TODO: remove for production
+                    "scopes": "profile email", //address phone https://uri.paypal.com/services/paypalattributes",
+                    "containerid": "btnPaypalLogin",
+                    "locale": "en-us",
+                    "returnurl": "http://alpha.tradeonup.com:81/paypal/ppAuth.php"
+                });
+            });
+        </script>
+        &nbsp;
+         if($ppEmail = getPayPalEmail()) { 
+            <span id="ppInfo">
+                PayPal Account Linked:&nbsp;<span id="ppEmail"> echo $ppEmail; </span>
+            </span>
+         } else { 
+            <span id="ppInfo" style="display:none;">
+                PayPal Account Linked:&nbsp;<span id="ppEmail"></span>
+            </span>
+         } 
+    </div>
+</div>
+
+ include("/tou/includes/view/footer.php"); 
+
+<!-- Le javascript
+================================================== -->
+<!-- Placed at the end of the document so the pages load faster -->
+
+ include("/tou/includes/view/globalInc.php"); 
+
+<script src="/js/page-includes/root/settings.js" type="text/javascript"></script>
+
+</body>
+</html>

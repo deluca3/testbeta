@@ -1,0 +1,282 @@
+
+//$_doRedirect = true; //Will redirect to login page if non-authenticated user attempts to get here.
+include("/tou/includes/authValidate.php");
+include("/tou/includes/model/Model.php");
+include("/tou/includes/model/Users.php");
+include("/tou/includes/model/Followers.php");
+include("/tou/includes/Utility.php");
+include("/tou/includes/view/renderFunctions.php");
+
+use TradeOnUp\Models\Users;
+use TradeOnUp\Models\Followers;
+use TradeOnUp\Core\Utility;
+
+$profile = null;
+
+if(isset($_GET['uid'])) {
+    $profile = Users::getUser($_GET['uid']);
+
+    if(!$profile) header("Location: /profile");
+
+    if(isset($_SESSION['userID'])) {
+        if((int)$profile['id'] == (int)$_SESSION['userID']) {
+            header("Location: /profile");
+        }
+    }
+
+    $displayName = $profile['username'];
+
+} else header("Location: /profile");
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title> echo $displayName  &middot; Trade On Up</title>
+    <meta name="description" content="Trade up until you get what you want">
+    <meta name="author" content="Trade On Up">
+
+    <!-- Le styles -->
+    <link href='http://fonts.googleapis.com/css?family=Open+Sans:400,300,600,700,800' rel='stylesheet' type='text/css'>
+    <link href="/css/bootstrap.css" type="text/css" rel="stylesheet">
+    <link href="/css/bootstrap-fixed.css" type="text/css" rel="stylesheet">
+
+    <link rel="stylesheet" href="/css/font-awesome.css">
+
+    <!--[if IE 7]>
+    <link rel="stylesheet" href="/css/font-awesome-ie7.css">
+    <![endif]-->
+
+    <link href="/css/typeahead.js-bootstrap.css" type="text/css" rel="stylesheet">
+    <link href="/css/bootstrap-modal-bs3patch.css" type="text/css" rel="stylesheet">
+    <link href="/css/bootstrap-modal.css" type="text/css" rel="stylesheet">
+
+    <link href="/css/tradeonup.css" type="text/css" rel="stylesheet">
+
+    <link href="/css/magnific-popup.css" type="text/css" rel="stylesheet">
+
+    <!-- IE support -->
+    <!--[if lt IE 9]>
+    <script src="/js/html5shiv.js" type="text/javascript"></script>
+    <script src="/js/respond.src.js" type="text/javascript"></script>
+    <script src="/js/core/ieFix.js" type="text/javascript"></script>
+
+    <link href="/css/tradeonup-ie.css" type="text/css" rel="stylesheet">
+    <![endif]-->
+
+    <!--[if gte IE 9]>
+    <style type="text/css">
+        .gradient {
+            filter: none !important;
+        }
+    </style>
+    <![endif]-->
+
+    <script language="javascript">
+        var _profileUsername = ' echo $profile['username']; ';
+    </script>
+
+    <!-- Fav icon -->
+    <link rel="shortcut icon" href="/img/favicon.ico">
+</head>
+
+<body>
+<div class="page-container">
+
+ include("/tou/includes/view/topNav.php"); 
+
+<div class="container fixedHeaderPadding">
+    <div id="pageContainer" class="row">
+        <div class="row rowFit">
+            <!-- Profile Pic -->
+            <div class="col-xs-3 flatCol">
+                
+                    if(!is_null($profile['avatar'])) {
+                        $avatar = $profile['avatar'];
+                    } else {
+                        $gravHash = Utility::gravatarHash($profile['email']);
+                        $avatar = "http://www.gravatar.com/avatar/$gravHash?s=350&r=g&d=identicon";
+                    }
+                
+                <img src=" echo $avatar; " class="img-responsive" style="border: 1px solid #DDDDDD;"/>
+            </div>
+
+            <!-- User Info / Wishlist -->
+            <div class="col-xs-9">
+                <div class="row">
+                    <div class="col-xs-8">
+                        <h3 style="margin-top: 0;"> echo @$profile['firstName'] . " " . @$profile['lastName']; </h3>
+                        <h5> echo @$profile['username']; </h5>
+                        <ul class="feedList">
+                             if(!is_null(@$profile['location'])): 
+                                <li><b>Location:&nbsp;</b> echo $profile['location']; </li>
+                             endif; 
+
+                             if(!is_null(@$profile['age']) && !is_null(@$profile['gender'])): 
+                                <li><b>Gender:&nbsp;</b> echo $profile['age'] . " / " . $profile['gender']; </li>
+                             endif; 
+
+                             if(!is_null(@$profile['school'])): 
+                                <li><b>School:&nbsp;</b> echo $profile['school'] </li>
+                             endif; 
+                        </ul>
+                        <div style="margin-bottom: 5px;">
+                             renderProfileStars($profile['id']); 
+                        </div>
+                        <a id="btnShowReviews" href="#">(See Reviews)</a>
+                        <div class="row" style="margin-top: 21px;">
+                            <div class="col-xs-12">
+                                 if(@$_SESSION['auth']): 
+                                     if(@Followers::isFollowing($_SESSION['userID'], $profile['id'])): 
+                                        <button id="btnFollowUser" class="btn btn-primary followed">Unfollow</button>
+                                     else: 
+                                        <button id="btnFollowUser" class="btn btn-primary">Follow</button>
+                                     endif; 
+                                    <a href="/messages/compose/ echo @$profile['username']; " id="btnMessageUser" class="btn btn-default">Message</a>
+                                 endif; 
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-xs-4 flatCol">
+                        <div class="row">
+                            <div class="col-xs-12">
+                                <div class="col-xs-6 flatCol">
+                                    <div id="btnShowFollowing" style="margin-right: 1px; cursor: pointer;" class="panel panel-default">
+
+                                        <div class="panel-body" style="text-align: center">
+                                            <h4 style="margin: 0"> echo @Followers::getFollowedCount($profile['id']); </h4>
+                                            <div>Following</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-xs-6 flatCol">
+                                    <div id="btnShowFollowers" style="margin-left: 1px; cursor: pointer;" class="panel panel-default">
+
+                                        <div class="panel-body" style="text-align: center">
+                                            <h4 style="margin: 0"> echo @Followers::getFollowerCount($profile['id']); </h4>
+                                            <div>Followers</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-xs-12">
+                                <div style="margin: 0;" class="panel panel-default">
+                                    <div class="panel-heading">
+                                        <h3 class="panel-title">Wish List</h3>
+                                    </div>
+                                    <div style="height: 115px; overflow: hidden;" class="panel-body">
+                                         renderWishlist($profile['id'], true); 
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <div class="row rowFit" style="margin-top: 15px;">
+            <!-- Profile Tabs -->
+            <div class="col-xs-12 flatCol" id="mainContent">
+                <!--Tabs-->
+                <ul class="nav feedTabs" id="profileTabs">
+                    <li class="firstTab feedTab active"><a href="#itemsTab" class="tabItems">Listed Items</a></li>
+                    <li class="feedTab"><a href="#activityTab" class="tabActivity">Activity Feed</a></li>
+                    <li class="feedTab"><a href="#connectionsTab" class="tabConnections">Connections</a></li>
+                    <li class="feedTab"><a href="#reviewTab" class="tabReview">Reviews</a></li>
+                    <!--<li class="feedTab"><a href="#aboutTab" class="tabAbout">About</a></li>-->
+                </ul>
+
+                <div class="tab-content">
+                    <div class="feedTabsBorder" style="text-align: right; padding: 3px;"></div>
+
+                    <div class="tab-pane active" id="itemsTab">
+
+                    </div>
+
+                    <div class="tab-pane" id="activityTab">
+                        <div id="feedData"></div>
+                    </div>
+
+                    <div class="tab-pane" id="connectionsTab">
+                        <div class="row">
+                            <div class="col-xs-3">
+                                <ul class="nav nav-pills nav-stacked">
+                                    <li id="btnConnFollowing" class="active"><a href="#">Following</a></li>
+                                    <li id="btnConnFollowers"><a href="#">Followers</a></li>
+                                </ul>
+                            </div>
+
+                            <div class="col-xs-9" id="followContent">
+
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tab-pane" id="reviewTab">
+                    </div>
+
+                    <div class="tab-pane" id="aboutTab">
+                        <div style="text-align: center;">Coming soon.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="mdlWishlist" class="modal" data-backdrop="static" data-width="750" tabindex="-1" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                <h4><span class="icon-list-ol">&nbsp;</span>Wish List</h4>
+            </div>
+            <div class="modal-body">
+
+                <div id="wishlistView">
+                    <div id="wishlistHeader" class="row">
+                        <div class="col-xs-4">Wish</div>
+                        <div class="col-xs-8">Tags</div>
+                    </div>
+
+                    <div id="wishRows"></div>
+                </div>
+
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+
+     include("/tou/includes/view/footer.php"); 
+
+    </div>
+
+    <!-- Le javascript
+    ================================================== -->
+    <!-- Placed at the end of the document so the pages load faster -->
+
+     include("/tou/includes/view/globalInc.php"); 
+
+    <script src="/js/templates/misc/stars.js" type="text/javascript"></script>
+
+    <script src="/js/templates/profile_itemBox.js" type="text/javascript"></script>
+    <script src="/js/templates/profile_followList.js" type="text/javascript"></script>
+    <script src="/js/templates/profile_activityFeed.js" type="text/javascript"></script>
+    <script src="/js/templates/profile_review.js" type="text/javascript"></script>
+    <script src="/js/templates/profile_wishRow.js" type="text/javascript"></script>
+
+    <script src="/js/templates/feeds/feed_note.js" type="text/javascript"></script>
+    <script src="/js/templates/feeds/feed_upload.js" type="text/javascript"></script>
+    <script src="/js/templates/feeds/feed_transaction.js" type="text/javascript"></script>
+    <script src="/js/templates/feeds/feed_transaction_offerList.js" type="text/javascript"></script>
+    <script src="/js/templates/feeds/feed_follow.js" type="text/javascript"></script>
+
+    <script src="/js/page-includes/root/userProfile.js" type="text/javascript"></script>
+</body>
+</html>

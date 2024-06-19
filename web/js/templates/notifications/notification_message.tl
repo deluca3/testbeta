@@ -1,0 +1,1 @@
+<b>{fromUser}</b> sent you a message.

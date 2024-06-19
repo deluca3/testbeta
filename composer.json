@@ -1,0 +1,54 @@
+{
+    "require":{
+        "php":">=5.3.0"
+    },
+    "require-dev":{
+        "luracast/explorer":"*",
+        "guzzle/guzzle":"~3.1.1",
+        "behat/behat":"2.5.*@stable",
+        "rodneyrehm/plist":"dev-master",
+        "zendframework/zendamf":"dev-master",
+        "symfony/yaml":"*",
+        "mustache/mustache": "dev-master",
+        "twig/twig": "v1.13.0",
+        "illuminate/view": "4.2.*",
+        "bshaffer/oauth2-server-php":"v1.0",
+	    "geoip2/geoip2": "0.6.*",
+        "paypal/adaptivepayments-sdk-php":"v2.5.106",
+        "gabrielbull/ups-api": "dev-master",
+        "dust-php/dust-php": "0.1.0",
+        "fightbulc/moment": "1.4.*",
+        "aws/aws-sdk-php": "2.*",
+        "hashids/hashids": "dev-master",
+        "gigablah/fsphinxphp": "1.1.*",
+        "jbbcode/jbbcode": "dev-master",
+        "solarium/solarium": "3.2.0",
+        "facebook/php-sdk-v4" : "4.0.*"
+    },
+    "repositories":[
+        {
+            "type":"vcs",
+            "url":"https://github.com/zendframework/ZendAmf.git"
+        },
+        {
+            "type":"package",
+            "package":{
+                "name":"luracast/explorer",
+                "version":"v3.0.0",
+                "dist":{
+                    "type":"zip",
+                    "url":"https://github.com/Luracast/Restler-API-Explorer/zipball/v3.0.0"
+                }
+            }
+        }
+    ],
+    "autoload":{
+        "psr-0":{
+            "Luracast\\Restler":"vendor/"
+        }
+    },
+    "minimum-stability": "dev",
+    "conflict": {
+        "restler/framework":"3.*"
+    }
+}

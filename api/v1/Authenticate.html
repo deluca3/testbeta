@@ -1,0 +1,212 @@
+
+
+namespace TradeOnUp\API;
+
+use Luracast\Restler\iAuthenticate;
+use Luracast\Restler\RestException;
+use TradeOnUp\Core\Database;
+use TradeOnUp\Models\Users;
+use TradeOnUp\Core\Log;
+use TradeOnUp\Core\Core;
+
+session_start();
+
+class Authenticate implements iAuthenticate {
+    public function __getWWWAuthenticateString() {
+        return "";
+    }
+
+    public function __isAllowed() {
+        if(empty($_SESSION['auth']) || $_SESSION['auth'] === false) {
+            return false;
+        }
+
+        //CSRF Check: Let's make sure we don't have any [obvious] session hijacking.
+        if(isset($_SESSION['csrfToken']) && $_SERVER['REQUEST_METHOD'] !== 'GET') {
+            if(!isset($_SERVER['HTTP_X_CSRF_TOKEN'])) {
+                return false;
+            }
+
+            if($_SERVER['HTTP_X_CSRF_TOKEN'] !== $_SESSION['csrfToken']) {
+                return false;
+            }
+        }
+
+        //If its been X amount of time since the last request, invalidate the session.
+        if(!@$_SESSION['cookieLogin'] && (time() - $_SESSION['lastUpdate']) > (60 * 30)) { //Presently 30 minute timeout (in seconds).
+            session_regenerate_id(true);
+            $_SESSION = [];
+            return false;
+        }
+
+        $_SESSION['lastUpdate'] = time();
+
+        return true;
+    }
+
+    private function __validateLogin($identity, $password) {
+        if(strlen($identity) > 0 && strlen($password) > 0) {
+            $user = Users::getUser($identity);
+
+            if(is_array($user)) {
+                if(!strcmp($user['password'], $password)) {
+                    //Passwords match, successful login.
+                    return $user;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public function __isCookieLoginValid() {
+        $cookie = $_COOKIE['rememberMe'];
+
+        //Make sure the cookie is actually valid...
+        if(isset($cookie['username']) && isset($cookie['series']) && isset($cookie['token'])) {
+            //Grab the session from the DB
+            $db = Database::getInstance();
+
+            $username = $db->real_escape_string($cookie['username']);
+            $seriesToken = $db->real_escape_string($cookie['series']);
+
+            $row = $db->querySingleRow("SELECT seriesToken, sessionToken FROM CookieSessions
+                                        WHERE username = '$username' AND seriesToken = '$seriesToken' LIMIT 1");
+
+            //Check if the session + series match...
+            if($row['seriesToken'] == $cookie['series']) {
+                if($row['sessionToken'] == $cookie['token']) {
+                    return true;
+                } else return null;
+            }
+        }
+
+        return false;
+    }
+
+    public function __validateCookieLogin(&$doLoginRedirect = null) {
+        $db = Database::getInstance();
+
+        $username = null;
+
+        //Check if the session + series match...
+        if($validCookie = $this->__isCookieLoginValid()) {
+            $username = $db->real_escape_string($_COOKIE['rememberMe']['username']);
+            $seriesToken = $db->real_escape_string($_COOKIE['rememberMe']['series']);
+
+            //Cookies are valid, grab userID
+            $user = Users::getUser($username);
+
+            if(is_array($user)) {
+                //Give them a valid login session
+                $_SESSION['auth'] = true;
+                $_SESSION['username'] = $username;
+                $_SESSION['lastUpdate'] = time();
+                $_SESSION['csrfToken'] = substr(bin2hex(openssl_random_pseudo_bytes(32, $isStrong)), 0, 32);
+                $_SESSION['cookieLogin'] = true;
+
+                //Add userID to the session
+                if($user['id'] > 0) $_SESSION['userID'] = $user['id'];
+
+                //Remove used token(s)
+                $db->queryAffected("DELETE FROM CookieSessions WHERE username = '$username' AND seriesToken = '$seriesToken'");
+
+                //Add a new token in the same series
+                $sessionToken = substr(bin2hex(openssl_random_pseudo_bytes(32, $isStrong)), 0, 32);
+                $db->queryInsert("INSERT INTO CookieSessions SET username = '$username', seriesToken = '$seriesToken', sessionToken = '$sessionToken', timestamp = NOW()");
+
+                //Update the cookie (30 day expiration on remembered logins)
+                $cookieExpire = time()+60*60*24*30;
+                $serverDomain = explode(":", $_SERVER['HTTP_HOST'])[0]; //TODO: Remove this for beta
+                setcookie("rememberMe[username]", $username, $cookieExpire, "/", $serverDomain, false, true);
+                setcookie("rememberMe[series]", $seriesToken, $cookieExpire, "/", $serverDomain, false, true);
+                setcookie("rememberMe[token]", $sessionToken, $cookieExpire, "/", $serverDomain, false, true);
+
+                //Update last login
+                $user['lastLogin'] = Core::mysqlTimestamp();
+                Users::update($user, "lastLogin");
+
+                $doLoginRedirect = true;
+
+                return true;
+            }
+        } elseif(is_null($validCookie)) {
+            //The session token was wrong but everything else was right? Probably an attempt to hijack, lets nuke em all.
+            $db->queryAffected("DELETE FROM CookieSessions WHERE username = '$username'");
+            //TODO: Log this has happened along with the IP it came from, make a note somewhere so we can notify the victim user on next login.
+        }
+
+        return false;
+    }
+
+    public function __cleanLogout() {
+        //Remove from DB
+        $db = Database::getInstance();
+
+        if(isset($_COOKIE['rememberMe'])) {
+            $username = $db->real_escape_string($_COOKIE['rememberMe']['username']);
+            $seriesToken = $db->real_escape_string($_COOKIE['rememberMe']['series']);
+
+            $db->queryAffected("DELETE FROM CookieSessions WHERE username = '$username' AND seriesToken = '$seriesToken'");
+
+            //Clear cookies
+            $serverDomain = explode(":", $_SERVER['HTTP_HOST'])[0]; //TODO: Remove this for beta
+            setcookie("rememberMe[username]", "", time() - 3600, "/", $serverDomain, false, true);
+            setcookie("rememberMe[series]", "", time() - 3600, "/", $serverDomain, false, true);
+            setcookie("rememberMe[token]", "", time() - 3600, "/", $serverDomain, false, true);
+        }
+
+        //Regen session ID and clear the session.
+        session_regenerate_id(true);
+        $_SESSION = [];
+
+        return true;
+    }
+
+    public function post($user, $password, $remember = false) {
+        if($user = $this->__validateLogin($user, $password)) {
+            //Successful login, setup the session
+            $_SESSION['auth'] = true;
+            $_SESSION['username'] = $user['username'];
+            $_SESSION['userID'] = $user['id'];
+            $_SESSION['lastUpdate'] = time();
+
+            //Setup remembered login if requested.
+            if((bool)$remember) {
+                $seriesToken = Core::secureRandomHex(32, $isStrong);
+                $sessionToken = Core::secureRandomHex(32, $isStrong);
+
+                $db = Database::getInstance();
+
+                $cookieQuery = "INSERT INTO CookieSessions SET
+                                    username = '{$user['username']}',
+                                    timestamp = NOW(),
+                                    seriesToken = '$seriesToken',
+                                    sessionToken = '$sessionToken'";
+
+                if($db->queryInsert($cookieQuery) != false) {
+                    //30 day expiration on remembered logins
+                    $serverDomain = explode(":", $_SERVER['HTTP_HOST'])[0]; //TODO: Remove this for beta
+                    setcookie("rememberMe[username]", $user['username'], time()+60*60*24*30, "/", $serverDomain, false, true);
+                    setcookie("rememberMe[series]", $seriesToken, time()+60*60*24*30, "/", $serverDomain, false, true);
+                    setcookie("rememberMe[token]", $sessionToken, time()+60*60*24*30, "/", $serverDomain, false, true);
+
+                    $_SESSION['cookieLogin'] = true;
+                }
+            }
+
+            //Update last login
+            $user['lastLogin'] = Core::mysqlTimestamp();
+            Users::update($user, "lastLogin");
+
+            //Generate Secure CSRF Token
+            $token = Core::secureRandomHex(32, $isStrong);
+
+            $_SESSION['csrfToken'] = $token;
+        } else throw new RestException(403, "Bad login");
+    }
+
+    protected function delete() {
+        return $this->__cleanLogout();
+    }
+}

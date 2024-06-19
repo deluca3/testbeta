@@ -1,0 +1,16 @@
+
+/**
+ * Copyright 2014 Trade On Up LLC.
+ * Originally written by Gage on 4/25/14
+ */
+include_once("/tou/includes/model/Model.php");
+
+function getPayPalEmail() {
+    $user = \TradeOnUp\Models\Users::getById($_SESSION['userID']);
+
+    if($user) {
+        return $user['paypalEmail'];
+    }
+
+    return null;
+}

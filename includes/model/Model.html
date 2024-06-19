@@ -1,0 +1,387 @@
+
+/**
+ * Copyright 2013 Trade On Up LLC.
+ * Originally written by Gage on 8/24/13
+ */
+
+namespace TradeOnUp\Models;
+
+require_once("/tou/includes/Database.php");
+
+use TradeOnUp\Core\Database;
+use TradeOnUp\Core\Log;
+
+class Model {
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Lookup Functions
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    public static function getById($id) {
+        $db = Database::getInstance();
+        $className = end(explode("\\", get_called_class()));
+        $whereClause = null;
+        $row = null;
+
+        if(is_numeric($id)) {
+            $whereClause = "id = '$id'";
+        } elseif(is_array($id) && isset($id['id'])) {
+            $whereClause = "id = '{$id['id']}'";
+        }
+
+        if(!is_null($whereClause)) {
+            $row = $db->querySingleRow("SELECT * FROM $className WHERE $whereClause LIMIT 1");
+        }
+
+        if(is_array($row)) {
+            return $row;
+        }
+
+        if($db->errno !== 0) {
+            Log::logToFile("database.log", $db->errno . ":\t" . $db->error, Log::CRITICAL);
+        }
+
+        return null;
+    }
+
+    public static function getByField($data, $field = "id") {
+        $db = Database::getInstance();
+        $className = end(explode("\\", get_called_class()));
+        $whereClause = null;
+        $rows = null;
+        $retData = null;
+
+        if(is_string($data)) {
+            $data = $db->real_escape_string($data);
+            $whereClause = "$field = '$data'";
+        } elseif(is_array($data)) {
+            $inClause = '(';
+
+            for($i=0;$i<sizeof($data);$i++) {
+                if(is_string($data[$i])) {
+                    $data[$i] = $db->real_escape_string($data[$i]);
+                }
+
+                $inClause .= "'{$data[$i]}', ";
+            }
+
+            $inClause = rtrim($inClause, ", ") . ")";
+
+            $whereClause = "$field IN $inClause";
+        } else {
+            $whereClause = "$field = '$data'";
+        }
+
+        if(!is_null($whereClause)) {
+            $rows = $db->queryMultipleRows("SELECT * FROM $className WHERE $whereClause");
+        }
+
+        if(is_array($rows)) {
+            foreach($rows as $row) {
+                $retData[] = $row;
+            }
+
+            return $retData;
+        }
+
+        if($db->errno !== 0) {
+            Log::logToFile("database.log", $db->errno . ":\t" . $db->error, Log::CRITICAL);
+        }
+
+        return null;
+    }
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Modification
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    public static function insert($dataArray) {
+        $className = end(explode("\\", get_called_class()));
+
+        if(is_array($dataArray)) {
+            $dataVars = '';
+
+            //Clear ID as this is a new row
+            unset($dataArray['id']);
+
+            $db = Database::getInstance();
+
+            foreach($dataArray as $key => $value) {
+                if(!is_null($value)) {
+                    //Escape any string values.
+                    if(is_string($value)) $value = $db->real_escape_string($value);
+
+                    $dataVars .= "$key = '$value', ";
+                }
+            }
+
+            if(strlen($dataVars) > 0) {
+                $dataVars = rtrim($dataVars, ", ");
+
+                if($insertID = $db->queryInsert("INSERT INTO $className SET $dataVars")) {
+                    return $insertID;
+                }
+
+                if($db->errno !== 0) {
+                    Log::logToFile("database.log", $db->errno . ":\t" . $db->error, Log::CRITICAL);
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public static function insertMultiple($dataArray) {
+        $className = end(explode("\\", get_called_class()));
+
+        if(is_array($dataArray)) {
+            $dataKeys = '';
+            $dataVars = '(';
+            $firstRow = true;
+
+            $db = Database::getInstance();
+
+            foreach($dataArray as $dataElem) {
+                //Clear ID as this is a new row
+                unset($dataElem['id']);
+
+                foreach($dataElem as $key => $value) {
+                    if($firstRow) {
+                        $dataKeys .= $key . ",";
+                    }
+
+                    //Escape any string values.
+                    if(is_string($value)) $value = $db->real_escape_string($value);
+
+                    //Account for null
+                    if(is_null($value)) $value = "NULL";
+                    else $value = "'$value'";
+
+                    $dataVars .= "$value,";
+                }
+
+                $dataVars = rtrim($dataVars, ",") . "), (";
+
+                $firstRow = false;
+            }
+
+            if(strlen($dataVars) > 0 && strlen($dataKeys) > 0) {
+                $dataVars = rtrim($dataVars, ", (");
+                $dataKeys = rtrim($dataKeys, ",");
+
+                if($insertID = $db->queryInsert("INSERT INTO $className ($dataKeys) VALUES $dataVars")) {
+                    return $insertID;
+                }
+
+                if($db->errno !== 0) {
+                    Log::logToFile("database.log", $db->errno . ":\t" . $db->error, Log::CRITICAL);
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public static function update($dataArray, $fieldsToUpdate = null, $field = "id") {
+        $className = end(explode("\\", get_called_class()));
+
+        if(is_array($dataArray) && isset($dataArray[$field])) {
+            $dataVars = '';
+
+            if(!is_null($fieldsToUpdate) && is_string($fieldsToUpdate)) {
+                $fieldsToUpdate = explode(", ", $fieldsToUpdate);
+            }
+
+            $db = Database::getInstance();
+
+            foreach($dataArray as $key => $value) {
+                if((is_array($fieldsToUpdate) && !in_array($key, $fieldsToUpdate)) || $key == "id") {
+                    continue;
+                }
+
+                if(is_null($value) && is_array($fieldsToUpdate)) {
+                    $dataVars .= "$key = NULL,";
+                } elseif(!is_null($value)) {
+                    //Escape any string values.
+                    if(is_string($value)) $value = $db->real_escape_string($value);
+
+                    $dataVars .= "$key = '$value',";
+                }
+            }
+
+            if(strlen($dataVars) > 0) {
+                $dataVars = rtrim($dataVars, ",");
+
+                $db->queryAffected("UPDATE $className SET $dataVars WHERE `$field` = '{$dataArray[$field]}' LIMIT 1");
+
+                if($db->errno !== 0) {
+                    Log::logToFile("database.log", $db->errno . ":\t" . $db->error, Log::CRITICAL);
+                } else {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public static function updateMany($dataArray, $fieldsToUpdate = null, $field = "id") {
+        $className = end(explode("\\", get_called_class()));
+
+        if(is_array($dataArray) && isset($dataArray[$field])) {
+            $dataVars = '';
+
+            if(!is_null($fieldsToUpdate) && is_string($fieldsToUpdate)) {
+                $fieldsToUpdate = explode(", ", $fieldsToUpdate);
+            }
+
+            $db = Database::getInstance();
+
+            foreach($dataArray as $key => $value) {
+                if((is_array($fieldsToUpdate) && !in_array($key, $fieldsToUpdate)) || $key == "id") {
+                    continue;
+                }
+
+                if(is_null($value) && is_array($fieldsToUpdate)) {
+                    $dataVars .= "$key = NULL,";
+                } elseif(!is_null($value)) {
+                    //Escape any string values.
+                    if(is_string($value)) $value = $db->real_escape_string($value);
+
+                    $dataVars .= "$key = '$value',";
+                }
+            }
+
+            if(strlen($dataVars) > 0) {
+                $dataVars = rtrim($dataVars, ",");
+
+                $db->queryAffected("UPDATE $className SET $dataVars WHERE `$field` = '{$dataArray[$field]}'");
+
+                if($db->errno !== 0) {
+                    Log::logToFile("database.log", $db->errno . ":\t" . $db->error, Log::CRITICAL);
+                } else {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public static function updateMultiple($dataArray, $fieldsToUpdate = null, $field = "id") {
+        $className = end(explode("\\", get_called_class()));
+
+        if(is_array($dataArray)) {
+            $dataVars = '';
+            $inClause = "(";
+
+            if(!is_null($fieldsToUpdate) && is_string($fieldsToUpdate)) {
+                $fieldsToUpdate = explode(", ", $fieldsToUpdate);
+            }
+
+            $db = Database::getInstance();
+
+            foreach($dataArray as $index => $dataRow) {
+                if(is_array($dataRow) && isset($dataRow[$field])) {
+                    if(is_string($dataRow[$field])) {
+                        $dataRow[$field] = $db->real_escape_string($dataRow[$field]);
+                    }
+
+                    $inClause .= "'{$dataRow[$field]}',";
+
+                    if($index == 0) {
+                        foreach($dataRow as $key => $value) {
+                            if((is_array($fieldsToUpdate) && !in_array($key, $fieldsToUpdate)) || $key == "id") {
+                                continue;
+                            }
+
+                            if(is_null($value) && is_array($fieldsToUpdate)) {
+                                $dataVars .= "$key = NULL,";
+                            } elseif(!is_null($value)) {
+                                //Escape any string values.
+                                if(is_string($value)) $value = $db->real_escape_string($value);
+
+                                $dataVars .= "$key = '$value',";
+                            }
+                        }
+                    }
+                }
+            }
+
+            if(strlen($dataVars) > 0 && strlen($inClause) > 1) {
+                $dataVars = rtrim($dataVars, ",");
+                $inClause = rtrim($inClause, ",") . ")";
+
+                $db->queryAffected("UPDATE $className SET $dataVars WHERE `$field` IN $inClause");
+
+                if($db->errno !== 0) {
+                    Log::logToFile("database.log", $db->errno . ":\t" . $db->error, Log::CRITICAL);
+                } else {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public static function delete($dataArray, $field = "id") {
+        $className = end(explode("\\", get_called_class()));
+        $deleteData = null;
+
+        if(is_array($dataArray) && isset($dataArray[$field])) {
+            $deleteData = $dataArray[$field];
+        } else {
+            $deleteData = $dataArray;
+        }
+
+        if(!is_null($deleteData)) {
+            $db = Database::getInstance();
+
+            if(is_string($deleteData)) {
+                $deleteData = $db->real_escape_string($deleteData);
+            }
+
+            if($db->queryAffected("DELETE FROM $className WHERE `$field` = '$deleteData' LIMIT 1")) {
+                return true;
+            }
+
+            if($db->errno !== 0) {
+                Log::logToFile("database.log", $db->errno . ":\t" . $db->error, Log::CRITICAL);
+            }
+        }
+
+        return false;
+    }
+
+    public static function deleteMultiple($dataArray, $field = "id") {
+        $className = end(explode("\\", get_called_class()));
+
+        if(is_array($dataArray)) {
+            $db = Database::getInstance();
+            $inClause = "(";
+
+            foreach($dataArray as $deleteData) {
+                if(is_string($deleteData)) {
+                    $deleteData = $db->real_escape_string($deleteData);
+                }
+
+                $inClause .= "'$deleteData',";
+            }
+
+            if(strlen($inClause) > 1) {
+                $inClause = rtrim($inClause, ",") . ")";
+
+                if($db->queryAffected("DELETE FROM $className WHERE `$field` IN $inClause")) {
+                    return true;
+                }
+
+                if($db->errno !== 0) {
+                    Log::logToFile("database.log", $db->errno . ":\t" . $db->error, Log::CRITICAL);
+                }
+            }
+        }
+
+        return false;
+    }
+}

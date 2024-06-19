@@ -1,0 +1,205 @@
+
+$_doRedirect = true; //Will redirect to login page if non-authenticated user attempts to get here.
+include("/tou/includes/authValidate.php"); 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Messages &middot; Trade On Up</title>
+    <meta name="description" content="Trade up until you get what you want">
+    <meta name="author" content="Trade On Up">
+
+    <!-- Le styles -->
+    <link href='http://fonts.googleapis.com/css?family=Open+Sans:400,300,600,700,800' rel='stylesheet' type='text/css'>
+    <link href="/css/bootstrap.css" type="text/css" rel="stylesheet">
+    <link href="/css/bootstrap-fixed.css" type="text/css" rel="stylesheet">
+
+    <link rel="stylesheet" href="/css/font-awesome.css">
+
+    <!--[if IE 7]>
+    <link rel="stylesheet" href="/css/font-awesome-ie7.css">
+    <![endif]-->
+
+    <link href="/css/prettyCheckable.css" type="text/css" rel="stylesheet">
+
+    <link href="/css/typeahead.js-bootstrap.css" type="text/css" rel="stylesheet">
+    <link href="/css/bootstrap-modal-bs3patch.css" type="text/css" rel="stylesheet">
+    <link href="/css/bootstrap-modal.css" type="text/css" rel="stylesheet">
+
+    <link href="/css/jquery.dataTables.css" type="text/css" rel="stylesheet">
+    <link href="/css/dataTables.bootstrap.css" type="text/css" rel="stylesheet">
+    <link href="/css/themes/default.css" type="text/css" rel="stylesheet">
+
+    <link href="/css/tradeonup.css" type="text/css" rel="stylesheet">
+
+    <link href="/css/magnific-popup.css" type="text/css" rel="stylesheet">
+
+    <!-- IE support -->
+    <!--[if lt IE 9]>
+    <script src="/js/html5shiv.js" type="text/javascript"></script>
+    <script src="/js/respond.src.js" type="text/javascript"></script>
+    <script src="/js/core/ieFix.js" type="text/javascript"></script>
+
+    <link href="/css/tradeonup-ie.css" type="text/css" rel="stylesheet">
+    <![endif]-->
+
+    <!--[if gte IE 9]>
+    <style type="text/css">
+        .gradient {
+            filter: none !important;
+        }
+    </style>
+    <![endif]-->
+
+    <script language="javascript">
+        var _urlView = ' if(isset($_GET['view'])) echo $_GET['view']; ';
+        var _urlTo = ' if(isset($_GET['to'])) echo $_GET['to']; ';
+    </script>
+
+    <!-- Fav icon -->
+    <link rel="shortcut icon" href="/img/favicon.ico">
+</head>
+
+<body>
+
+ include("/tou/includes/view/topNav.php"); 
+
+<div class="container fixedHeaderPadding">
+    <div id="pageContainer" class="row">
+        <div class="panel panel-primary">
+            <div class="panel-heading">
+                <h3 class="panel-title">
+                    <i class="icon-comments">&nbsp;</i>
+                    Messages
+                    &nbsp;&middot;&nbsp;
+                    <small id="lblView" style="color: #EEEEEE;">Inbox</small>
+                </h3>
+            </div>
+            <div class="panel-body">
+                <div id="msgNav" class="navbar navbar-default" style="z-index: 0;">
+                    <div style="margin-left: 7px; margin-top: 7px;">
+                        <div id="msgBtns" class="pull-right" style="margin-right: 7px;">
+
+                            <div id="markMsgBtns" style="display: inline-block;">
+                                <button id="btnMarkRead" disabled="disabled" class="btn btn-default">
+                                    <i class="icon-eye-open" style="color: #39B54A;">&nbsp;</i>
+                                    Mark as Read
+                                </button>
+
+                                <button id="btnMarkUnread" disabled="disabled" class="btn btn-default">
+                                    <i class="icon-eye-close" style="color: #D9534F;">&nbsp;</i>
+                                    Mark as Unread
+                                </button>
+                            </div>
+
+                            <div id="replyMsgBtns" style="display: none;">
+                                <button id="btnReply" class="btn btn-default">
+                                    <i class="icon-mail-reply">&nbsp;</i>
+                                    Reply
+                                </button>
+
+                                <button id="btnForward" class="btn btn-default">
+                                    <i class="icon-mail-forward">&nbsp;</i>
+                                    Forward
+                                </button>
+                            </div>
+
+                            <div id="trashBtns" style="display: none;">
+                                <button id="btnRestore" disabled="disabled" class="btn btn-success">
+                                    <i class="icon-rotate-left">&nbsp;</i>
+                                    Restore
+                                </button>
+
+                                <button id="btnEmptyTrash" disabled="disabled" class="btn btn-danger">
+                                    <i class="icon-trash">&nbsp;</i>
+                                    Empty Trash
+                                </button>
+                            </div>
+
+                            &nbsp;
+
+                            <button id="btnDelete" disabled="disabled" class="btn btn-danger">
+                                <i class="icon-remove-sign">&nbsp;</i>
+                                Delete
+                            </button>
+                        </div>
+
+                        <button id="btnCompose" class="btn btn-success pull-left">
+                            <i class="icon-plus-sign">&nbsp;</i>
+                            Compose
+                        </button>
+
+                        <div id="searchDiv" style="padding: 0 12px;" class="input-group">
+                            <span class="input-group-addon">
+                                <label style="margin:0;" for="txtMessageSearch">
+                                    <i class="icon-search"></i>
+                                </label>
+                            </span>
+
+                            <input type="text" id="txtMessageSearch" placeholder="Search Inbox" class="form-control">
+                        </div>
+                    </div>
+                </div>
+                <div class="col-xs-3 flatCol touSideBar" style="min-height: 450px;">
+                    <ul class="nav nav-pills nav-stacked" id="sidebar">
+                        <li class="active">
+                            <a id="sidebar_btnInbox" href="#">
+                                <i class="icon-inbox">&nbsp;</i>
+                                Inbox
+                                <div id="sidebar_msgBadge" class="badge badge-primary"> echo @$numMsgs; </div>
+                            </a>
+                        </li>
+                        <li>
+                            <a id="sidebar_btnSent" href="#">
+                                <i class="icon-folder-open"></i>
+                                Sent
+                            </a>
+                        </li>
+                        <li>
+                            <a id="sidebar_btnTrash" href="#">
+                                <i class="icon-trash">&nbsp;</i>
+                                Trash
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                <div class="col-xs-9 flatCol" id="contentArea">
+                    <table id="tblMessages" class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th><input class="tableCheckbox" id="chkSelectAll" type="checkbox"></th>
+                                <th width="40%">Subject</th>
+                                <th>Read</th>
+                                <th>From</th>
+                                <th>Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+ include("/tou/includes/view/footer.php"); 
+
+<!-- Le javascript
+================================================== -->
+<!-- Placed at the end of the document so the pages load faster -->
+
+ include("/tou/includes/view/globalInc.php"); 
+
+<script src="/js/templates/messages_msgList.js" type="text/javascript"></script>
+
+<script src="/js/dateFormat.js" type="text/javascript"></script>
+<script src="/js/prettyCheckable.js" type="text/javascript"></script>
+<script src="/js/jquery.dataTables.js" type="text/javascript"></script>
+<script src="/js/dataTables.bootstrap.js" type="text/javascript"></script>
+<script src="/js/jquery.sceditor.bbcode.js" type="text/javascript"></script>
+
+<script src="/js/page-includes/root/messages.js" type="text/javascript"></script>
+
+</body>
+</html>

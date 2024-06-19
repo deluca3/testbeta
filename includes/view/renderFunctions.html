@@ -1,0 +1,101 @@
+
+/**
+ * Copyright 2013 Trade On Up LLC.
+ * Originally written by Gage on 3/13/14
+ */
+include_once("/tou/includes/model/Model.php");
+
+function renderStars($user, $bigStars = false) {
+    include_once("/tou/includes/model/Reviews.php");
+
+    $reviewData = TradeOnUp\Models\Reviews::getReviewAverageForUser($user);
+
+    if($bigStars) $bigStars = "profileStar";
+    else $bigStars = "reviewStar";
+
+    for($i=1; $i < 6; $i++) {
+        if($i <= $reviewData['rating'] && $reviewData['rating'] > 0) {
+            echo "<span><img src=\"/img/filledStar.png\" class=\"$bigStars\"></span>";
+        } else {
+            echo "<span><img src=\"/img/emptyStar.png\" class=\"$bigStars\"></span>";
+        }
+    }
+}
+
+function renderProfileStars($user) {
+    include_once("/tou/includes/model/Reviews.php");
+
+    $reviewData = TradeOnUp\Models\Reviews::getReviewAverageForUser($user);
+
+    for($i=1; $i < 6; $i++) {
+        if($i <= $reviewData['rating'] && $reviewData['rating'] > 0) {
+            echo '<span><img src="/img/filledStar.png" class="profileStar"></span>';
+        } else {
+            echo '<span><img src="/img/emptyStar.png" class="profileStar"></span>';
+        }
+    }
+
+    echo "&nbsp;<span style=\"margin-top: 2px;\">({$reviewData['count']})</span>";
+
+    $pyramidBadge = null;
+    $starBadge = null;
+    $count = $reviewData['count'];
+
+    if($count >= 5 && $count < 10) {
+        $pyramidBadge = 'lvl1.png';
+    } elseif($count >= 10 && $count < 25) {
+        $pyramidBadge = 'lvl2.png';
+    } elseif($count >= 25 && $count < 50) {
+        $pyramidBadge = 'lvl3.png';
+    } elseif($count >= 50 && $count < 100) {
+        $pyramidBadge = 'lvl4.png';
+    } elseif($count >= 100 && $count < 250) {
+        $pyramidBadge = 'lvl5.png';
+    } elseif($count >= 250 && $count < 500) {
+        $pyramidBadge = 'lvl6.png';
+    } elseif($count >= 500 && $count < 1000) {
+        $pyramidBadge = 'lvl7.png';
+    }
+
+    if($count >= 1000 && $count < 2000) {
+        $starBadge = 'lvl8.png';
+    } elseif($count >= 2000 && $count < 4000) {
+        $starBadge = 'lvl9.png';
+    } elseif($count >= 4000 && $count < 8000) {
+        $starBadge = 'lvl10.png';
+    } elseif($count >= 8000 && $count < 16000) {
+        $starBadge = 'lvl11.png';
+    } elseif($count >= 16000 && $count < 32000) {
+        $starBadge = 'lvl12.png';
+    } elseif($count >= 32000 && $count < 64000) {
+        $starBadge = 'lvl13.png';
+    } elseif($count >= 64000) {
+        $starBadge = 'lvl14.png';
+    }
+
+    if($pyramidBadge) $pyramidBadge = "<img src=\"/img/badges/$pyramidBadge\" />";
+    if($starBadge) $starBadge = "<img src=\"/img/badges/$starBadge\" />";
+
+    echo"<div class=\"pull-right\">
+        $pyramidBadge
+        $starBadge
+    </div>";
+}
+
+function renderWishlist($user, $withViewLink = false) {
+    include_once("/tou/includes/model/Wishlists.php");
+
+    $wishes = \TradeOnUp\Models\Wishlists::getRandomWishes($user, 4);
+
+    if(is_array($wishes)) {
+        echo "<ul class=\"wishList\">";
+        foreach($wishes as $wish) {
+            echo "<li>{$wish['identifier']}</li>";
+        }
+        echo "</ul>";
+
+        if($withViewLink) {
+            echo "<a id=\"btnViewWishes\" href=\"#\">View Wishes</a>";
+        }
+    } else echo "No wishes yet..";
+}

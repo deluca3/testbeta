@@ -1,0 +1,42 @@
+
+/**
+ * Copyright 2013 Trade On Up LLC.
+ * Originally written by Gage on 10/10/13
+ */
+
+namespace {
+    //Uses PEAR Mail.
+    require_once("Mail.php");
+}
+
+namespace TradeOnUp\Core {
+    use \Mail as pearMail;
+    use \PEAR;
+
+    class Mail {
+        public static function send($to, $subject, $body, $from = "Trade On Up <support@tradeonup.com>") {
+            $headers = [
+                'From' => $from,
+                'To' => $to,
+                'Subject' => $subject
+            ];
+
+            $smtp = pearMail::factory('smtp', array(
+                'host' => 'ssl://smtp.gmail.com',
+                'port' => '465',
+                'auth' => true,
+                'username' => 'support@tradeonup.com',
+                'password' => 's@uc3r20k!'
+            ));
+
+            $mail = $smtp->send($to, $headers, $body);
+
+            if (PEAR::isError($mail)) {
+                return $mail->getMessage();
+            }
+
+            return true;
+        }
+    }
+
+}

@@ -1,0 +1,482 @@
+
+$_doRedirect = true; //Will redirect to login page if non-authenticated user attempts to get here.
+include("/tou/includes/authValidate.php");
+include("/tou/includes/model/Model.php");
+include("/tou/includes/model/Users.php");
+include("/tou/includes/model/Followers.php");
+include("/tou/includes/Utility.php");
+include("/tou/includes/view/renderFunctions.php");
+
+use TradeOnUp\Models\Users;
+use TradeOnUp\Models\Followers;
+use TradeOnUp\Core\Utility;
+
+$profile = Users::getUser($_SESSION['userID']);
+
+if(!is_null($profile['email'])) {
+    $gravHash = Utility::gravatarHash($profile['email']);
+    $gravURL = "http://www.gravatar.com/avatar/$gravHash?s=350&r=g&d=identicon";
+}
+
+if(!is_null($profile['avatar'])) {
+    $avatar = $profile['avatar'];
+} elseif(!is_null($profile['email'])) {
+    $avatar = $gravURL;
+} else {
+    $avatar = "/img/stockUser.png";
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>My Profile &middot; Trade On Up</title>
+    <meta name="description" content="Trade up until you get what you want">
+    <meta name="author" content="Trade On Up">
+
+    <!-- Le styles -->
+    <link href='http://fonts.googleapis.com/css?family=Open+Sans:400,300,600,700,800' rel='stylesheet' type='text/css'>
+    <link href="/css/bootstrap.css" type="text/css" rel="stylesheet">
+    <link href="/css/bootstrap-fixed.css" type="text/css" rel="stylesheet">
+
+    <link rel="stylesheet" href="/css/font-awesome.css">
+
+    <!--[if IE 7]>
+    <link rel="stylesheet" href="/css/font-awesome-ie7.css">
+    <![endif]-->
+
+    <link href="/css/typeahead.js-bootstrap.css" type="text/css" rel="stylesheet">
+    <link href="/css/bootstrap-modal-bs3patch.css" type="text/css" rel="stylesheet">
+    <link href="/css/bootstrap-modal.css" type="text/css" rel="stylesheet">
+
+    <link href="/css/tradeonup.css" type="text/css" rel="stylesheet">
+
+    <link href="/css/prettyCheckable.css" type="text/css" rel="stylesheet">
+    <link href="/css/toggles-light.css" type="text/css" rel="stylesheet">
+    <link href="/css/jquery.Jcrop.css" type="text/css" rel="stylesheet">
+    <link href="/css/jquery.toolbars.css" type="text/css" rel="stylesheet">
+    <link href="/css/tagmanager.css" type="text/css" rel="stylesheet">
+    <link href="/css/magnific-popup.css" type="text/css" rel="stylesheet">
+
+    <!-- IE support -->
+    <!--[if lt IE 9]>
+    <script src="/js/html5shiv.js" type="text/javascript"></script>
+    <script src="/js/respond.src.js" type="text/javascript"></script>
+    <script src="/js/core/ieFix.js" type="text/javascript"></script>
+
+    <link href="/css/tradeonup-ie.css" type="text/css" rel="stylesheet">
+    <![endif]-->
+
+    <!--[if gte IE 9]>
+    <style type="text/css">
+        .gradient {
+            filter: none !important;
+        }
+    </style>
+    <![endif]-->
+
+    <script language="JavaScript">
+        var _gravatarUrl = ' echo $gravURL; ';
+    </script>
+
+    <!-- Fav icon -->
+    <link rel="shortcut icon" href="/img/favicon.ico">
+</head>
+
+<body>
+<div class="page-container">
+
+ include("/tou/includes/view/topNav.php"); 
+
+<div class="container fixedHeaderPadding">
+    <div id="pageContainer" class="row">
+        <div class="row rowFit">
+            <!-- Profile Pic -->
+            <div class="col-xs-3 flatCol">
+                <div id="avatarBox">
+                    <img id="userAvatar" src=" echo $avatar; " class="img-responsive" style="border: 1px solid #DDDDDD;"/>
+
+                    <div id="avatarProgress" style="display: none;">
+                        <div class="progress progress-striped active" style="width: 97%; margin: 0 7px;">
+                            <div id="avUploadProgress" style="width: 0" aria-valuemax="100" aria-valuemin="0" aria-valuenow="0" role="progressbar" class="progress-bar">
+                                <span class="sr-only">0% Complete</span>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <div id="avatarHover" style="display: none;">
+                        <div class="dropdown">
+                            <button id="btnAvatarMenu" data-toggle="dropdown" class="btn btn-sm btn-default" style="width: 98%;">
+                                <i class="icon-upload-alt">&nbsp;</i>
+                                Change Avatar
+                                <span class="caret">
+                            </button>
+
+                            <ul id="avatarMenu" class="dropdown-menu" style="width: 100%; text-align: left;" role="menu">
+                                <li>
+                                    <a id="btnUploadAvatar" href="#">
+                                        <i class="icon-camera">&nbsp;</i>
+                                        Upload Image
+
+                                        <input name="files[]" id="fileAvatarUpload" type="file" style="top: 2px; left: 0;" class="hiddenFileUpload" accept="image/*"
+                                               title="Choose image to use as avatar">
+                                    </a>
+                                </li>
+                                <li>
+                                    <a id="btnSetGravatar" href="#">
+                                        <i class="icon-cloud">&nbsp;</i>
+                                        Use Gravatar
+                                    </a>
+                                </li>
+                                <li>
+                                    <a id="btnAvatarThumb" href="#">
+                                        <i class="icon-picture">&nbsp;</i>
+                                        Change Thumbnail
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- User Info / Wishlist -->
+            <div class="col-xs-9">
+                <div class="row">
+                    <div class="col-xs-8">
+                        <h3 style="margin-top: 0;"> echo @$profile['firstName'] . " " . @$profile['lastName']; </h3>
+                        <h5> echo @$profile['username']; </h5>
+                        <ul class="feedList">
+                             if(!is_null(@$profile['location'])): 
+                                <li><b>Location:&nbsp;</b> echo $profile['location']; </li>
+                             endif; 
+
+                             if(!is_null(@$profile['age']) && !is_null(@$profile['gender'])): 
+                                <li><b>Gender:&nbsp;</b> echo $profile['age'] . " / " . $profile['gender']; </li>
+                             endif; 
+
+                             if(!is_null(@$profile['school'])): 
+                                <li><b>School:&nbsp;</b> echo $profile['school'] </li>
+                             endif; 
+                        </ul>
+                        <div style="margin-bottom: 5px;">
+                             renderProfileStars($_SESSION['userID']); 
+                        </div>
+                        <a id="btnShowReviews" href="#">(See Reviews)</a>
+                    </div>
+
+                    <div class="col-xs-4 flatCol">
+                        <div class="row">
+                            <div class="col-xs-12">
+                                <div class="col-xs-6 flatCol">
+                                    <div id="btnShowFollowing" style="margin-right: 1px; cursor: pointer;" class="panel panel-default">
+
+                                        <div class="panel-body" style="text-align: center">
+                                            <h4 style="margin: 0"> echo @Followers::getFollowedCount($profile['id']); </h4>
+                                            <div>Following</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-xs-6 flatCol">
+                                    <div id="btnShowFollowers" style="margin-left: 1px; cursor: pointer;" class="panel panel-default">
+
+                                        <div class="panel-body" style="text-align: center">
+                                            <h4 style="margin: 0"> echo @Followers::getFollowerCount($profile['id']); </h4>
+                                            <div>Followers</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-xs-12">
+                                <div style="margin: 0;" class="panel panel-default">
+                                    <div class="panel-heading">
+                                        <h3 class="panel-title">Wish List</h3>
+                                    </div>
+                                    <div style="height: 115px; overflow: hidden;" class="panel-body">
+                                         renderWishlist($profile['id']); 
+                                        <a href="#" id="btnWishlist">Manage Wishes</a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <div class="row rowFit" style="margin-top: 15px;">
+            <!-- Profile Tabs -->
+            <div class="col-xs-12 flatCol" id="mainContent">
+                <!--Tabs-->
+                <ul class="nav feedTabs" id="profileTabs">
+                    <li class="firstTab feedTab active"><a href="#itemsTab" class="tabItems">My Items</a></li>
+                    <li class="feedTab"><a href="#transactionTab" class="tabTransactions">Transactions</a></li>
+                    <li class="feedTab"><a href="#activityTab" class="tabActivity">Activity Feed</a></li>
+                    <li class="feedTab"><a href="#watchingTab" class="tabWatching">Watching</a></li>
+                    <li class="feedTab"><a href="#connectionsTab" class="tabConnections">Connections</a></li>
+                    <li class="feedTab"><a href="#reviewTab" class="tabReview">Reviews</a></li>
+                    <!--<li class="feedTab"><a href="#aboutTab" class="tabAbout">About</a></li>-->
+                </ul>
+
+                <div class="tab-content">
+                    <div class="feedTabsBorder" style="text-align: right; padding: 3px;"></div>
+
+                    <div class="tab-pane active" id="itemsTab">
+
+                    </div>
+
+                    <div class="tab-pane" id="transactionTab">
+                        <div class="row" style="border-bottom: 1px solid #DDD; padding-bottom: 7px;">
+                            <div class="col-xs-6 flatCol"><h2 style="margin:0;">My Transactions</h2></div>
+
+                            <div class="col-xs-3">
+                                <span>TIME</span>
+                                <select id="transactionTab_selTime" class="form-control transactionSelect">
+                                    <option value="0">Today</option>
+                                    <option value="1" selected="selected">Past Week</option>
+                                    <option value="2">Past Month</option>
+                                    <option value="3">Past 3 Months</option>
+                                    <option value="4">Past 6 Months</option>
+                                    <option value="5">Past Year</option>
+                                    <option value="6">All Time</option>
+                                </select>
+                            </div>
+
+                            <div class="col-xs-3">
+                                <span>VIEW</span>
+                                <select id="transactionTab_selView" class="form-control transactionSelect">
+                                    <option value="all" selected="selected">All Transactions</option>
+                                    <option value="pending">Pending</option>
+                                    <option value="accepted">Accepted</option>
+                                    <option value="declined">Declined</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div style="margin-top: 5px;" class="row">
+                            <div class="col-xs-6 col-xs-offset-6">
+                                <input style="width: 100%;" id="transactionTab_txtSearch" class="form-control" placeholder="Search Transactions" type="text">
+                            </div>
+                        </div>
+                        <div id="transactionTab_listing">
+                            <br/>
+                            <span style="text-align: center;">No transactions to display, make an offer or purchase to get started.</span>
+                        </div>
+                    </div>
+
+                    <div class="tab-pane" id="activityTab">
+                        <div class="row" style="margin-bottom: 15px;">
+                            <div class="col-xs-12 flatCol">
+                                <div class="feedNote">
+                                    <input type="text" id="feed_txtNote" placeholder="Post a Note..."/>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="feedData"></div>
+                    </div>
+
+                    <div class="tab-pane" id="watchingTab">
+
+                    </div>
+
+                    <div class="tab-pane" id="connectionsTab">
+                        <div class="row">
+                            <div class="col-xs-3">
+                                <ul class="nav nav-pills nav-stacked">
+                                    <li id="btnConnFollowing" class="active"><a href="#">Following</a></li>
+                                    <li id="btnConnFollowers"><a href="#">Followers</a></li>
+                                </ul>
+                            </div>
+
+                            <div class="col-xs-9" id="followContent"></div>
+                        </div>
+                    </div>
+
+                    <div class="tab-pane" id="reviewTab">
+                    </div>
+
+                    <div class="tab-pane" id="aboutTab">
+                        <div style="text-align: center;">Coming soon.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="mdlCropThumb" class="modal" data-backdrop="static" tabindex="-1" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                <h4><span class="icon-picture">&nbsp;</span>Select Thumbnail</h4>
+            </div>
+            <div class="modal-body" style="overflow: hidden;">
+                <div class="row">
+                    <div class="col-xs-9">
+                        <div class="thumbBorder">
+                            <img src="" id="thumb_bigImg"/>
+                        </div>
+                    </div>
+                    <div class="col-xs-3">
+                        <div class="thumbBorderPreview">
+                            <img src="" id="thumb_smallImg"/>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                <button type="button" id="selThumb_btnDone" class="btn btn-success">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="mdlCategory" class="modal" data-backdrop="static" data-width="750" tabindex="-1" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                <h4><span class="icon-sitemap">&nbsp;</span>Select Category</h4>
+            </div>
+            <div class="modal-body">
+                <div id="mdlCategory_catScroll" class="categorySideScroll"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Cancel</button>
+                <button type="button" id="selCategory_btnDone" class="btn btn-success">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="mdlWishlist" class="modal" data-backdrop="static" data-width="750" tabindex="-1" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-hidden="true">&times;</button>
+                <h4><span class="icon-list-ol">&nbsp;</span>Wish List</h4>
+            </div>
+            <div class="modal-body">
+
+                <div id="wishlist_modeLoading" style="text-align: center; display: none;"><img src="/img/ajax-loader.gif"/></div>
+
+                <div class="wishlist_modeView">
+                    <div class="navbar navbar-default" style="z-index: 0;">
+                        <div style="margin-left: 7px; margin-top: 7px;">
+                            <div class="pull-left">
+                                <button id="mdlWishlist_btnNewWish" class="btn btn-success"><i class="icon-plus">&nbsp;</i>New Wish</button>
+                            </div>
+                            <div style="margin-right: 7px;" class="pull-right">
+                                <button id="mdlWishlist_btnDeleteWish" class="btn btn-danger"><i class="icon-trash">&nbsp;</i>Delete</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="wishlistView">
+                        <div id="wishlistHeader" class="row">
+                            <div class="col-xs-1"><input id="chkSelectWishes" type="checkbox"></div>
+                            <div class="col-xs-3">Wish</div>
+                            <div class="col-xs-8">Tags</div>
+                        </div>
+
+                        <div id="wishRows"></div>
+                    </div>
+                </div>
+
+                <div class="wishlist_modeAddEdit" style="display: none;">
+                    <form class="form-horizontal" role="form">
+                        <div class="form-group">
+                            <label for="mdlWishlist_txtWishName" class="col-sm-1 control-label">Wish</label>
+                            <div class="col-sm-11">
+                                <input type="text" class="form-control" id="mdlWishlist_txtWishName" placeholder="Enter the name of the item you want">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="mdlWishlist_txtTags" class="col-sm-1 control-label">Tags</label>
+                            <div class="col-sm-11">
+                                <div class="input-group">
+                                    <input type="text" placeholder="Enter tags that identify the item" id="mdlWishlist_txtTags" class="form-control tagField">
+                                    <span class="input-group-btn tagFieldBtn"><button type="button" class="btn btn-success" id="mdlWishlist_btnAddTag"><i class="glyphicon glyphicon-plus"></i></button></span>
+                                </div>
+
+                                <input type="hidden" id="mdlWishlist_tagData"/>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+
+            </div>
+            <div class="modal-footer">
+                <div class="wishlist_modeView">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                </div>
+
+                <div class="wishlist_modeAddEdit" style="display: none;">
+                    <button type="button" id="mdlWishlist_btnCancelAddEdit" class="btn btn-default">Cancel</button>
+                    <button type="button" id="mdlWishlist_btnDoneAddEdit" class="btn btn-primary">Done</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+    <div id="mdlItem" class="modal" data-backdrop="static" tabindex="-1" data-width="650" style="display: none;">
+    </div>
+
+    <div style="display: none;" id="itemToolbar">
+        <a class="toolbarEdit" title="Edit Item" href="#"><i class="icon-edit"></i></a>
+        <a class="toolbarThumb" title="Modify Thumbnail" href="#"><i class="icon-picture"></i></a>
+        <a class="toolbarDelete" title="Delete Item" href="#"><i class="icon-trash"></i></a>
+    </div>
+
+    <iframe name="avUpload" id="avUpload" style="display: none;"></iframe>
+
+     include("/tou/includes/view/footer.php"); 
+
+</div>
+
+<!-- Le javascript
+================================================== -->
+<!-- Placed at the end of the document so the pages load faster -->
+
+ include("/tou/includes/view/globalInc.php"); 
+
+<script src="/js/templates/misc/stars.js" type="text/javascript"></script>
+
+<script src="/js/templates/profile_itemModal.js" type="text/javascript"></script>
+<script src="/js/templates/profile_categoryBox.js" type="text/javascript"></script>
+<script src="/js/templates/profile_picListing.js" type="text/javascript"></script>
+<script src="/js/templates/profile_itemBox.js" type="text/javascript"></script>
+<script src="/js/templates/profile_followList.js" type="text/javascript"></script>
+<script src="/js/templates/profile_transactionOfferList.js" type="text/javascript"></script>
+<script src="/js/templates/profile_transactionTab.js" type="text/javascript"></script>
+<script src="/js/templates/profile_activityFeed.js" type="text/javascript"></script>
+<script src="/js/templates/profile_review.js" type="text/javascript"></script>
+<script src="/js/templates/profile_wishRow.js" type="text/javascript"></script>
+
+<script src="/js/templates/feeds/feed_note.js" type="text/javascript"></script>
+<script src="/js/templates/feeds/feed_upload.js" type="text/javascript"></script>
+<script src="/js/templates/feeds/feed_transaction.js" type="text/javascript"></script>
+<script src="/js/templates/feeds/feed_transaction_offerList.js" type="text/javascript"></script>
+<script src="/js/templates/feeds/feed_follow.js" type="text/javascript"></script>
+
+<script src="/js/prettyCheckable.js" type="text/javascript"></script>
+<script src="/js/jquery.Jcrop.js" type="text/javascript"></script>
+<script src="/js/jquery.NobleCount.js" type="text/javascript"></script>
+<script src="/js/jquery.toolbar.js" type="text/javascript"></script>
+<script src="/js/parsley.js" type="text/javascript"></script>
+<script src="/js/tagmanager.js" type="text/javascript"></script>
+<script src="/js/toggles.js" type="text/javascript"></script>
+
+<script src="/js/canvas-to-blob.min.js" type="text/javascript"></script>
+<script src="/js/load-image.min.js" type="text/javascript"></script>
+<script src="/js/jquery.ui.widget.js" type="text/javascript"></script>
+<script src="/js/jquery.iframe-transport.js" type="text/javascript"></script>
+<script src="/js/jquery.fileupload.js" type="text/javascript"></script>
+<script src="/js/jquery.fileupload-process.js" type="text/javascript"></script>
+<script src="/js/jquery.fileupload-image.js" type="text/javascript"></script>
+
+<script src="/js/page-includes/root/profile.js" type="text/javascript"></script>
+</body>
+</html>

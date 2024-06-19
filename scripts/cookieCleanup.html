@@ -1,0 +1,12 @@
+
+	include("/tou/includes/Database.php");
+	
+	use TradeOnUp\Core\Database;
+	
+	$db = Database::getInstance();
+	
+	//Remove expired cookie sessions
+	$numDeleted = $db->queryAffected("DELETE FROM CookieSessions WHERE (UNIX_TIMESTAMP(NOW()) - UNIX_TIMESTAMP(timestamp)) > (60 * 30)");
+
+	//TODO: Add logging
+

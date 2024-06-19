@@ -1,0 +1,258 @@
+
+
+namespace TradeOnUp\Models;
+
+use TradeOnUp\Core\Database;
+use TradeOnUp\Models\Users;
+
+class Offers extends Model {
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Lookup Functions
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    public static function getOffersForItem($item) {
+        $db = Database::getInstance();
+        $rows = null;
+        $whereClause = null;
+
+        if(is_numeric($item)) {
+            $whereClause = "o.itemID = '$item'";
+        } elseif(is_array($item) && isset($item['id']) && is_numeric($item['id'])) {
+            $item['id'] = (int)$item['id'];
+
+            if($item['id'] > 0) {
+                $whereClause = "o.itemID = '{$item['id']}'";
+            }
+        }
+
+        if(!is_null($whereClause)) {
+            $rows = $db->queryMultipleRows("SELECT *, o.id as id FROM OfferLists ol
+                                            LEFT JOIN Offers o ON ol.offerID = o.id
+                                            WHERE $whereClause AND o.rejected = '0' AND o.endedAt IS NULL
+                                            GROUP BY o.id");
+        }
+
+        if(is_array($rows)) {
+            return $rows;
+        }
+
+        return null;
+    }
+
+    public static function getOfferItemsForItem($item) {
+        $db = Database::getInstance();
+        $rows = null;
+        $whereClause = null;
+
+        if(is_numeric($item)) {
+            $whereClause = "o.itemID = '$item'";
+        } elseif(is_array($item) && isset($item['id']) && is_numeric($item['id'])) {
+            $item['id'] = (int)$item['id'];
+
+            if($item['id'] > 0) {
+                $whereClause = "o.itemID = '{$item['id']}'";
+            }
+        }
+
+        if(!is_null($whereClause)) {
+            //Ugh so many joins.. TODO: Cut this back to what's necessary if applicable
+            $rows = $db->queryMultipleRows("SELECT i.*, i.id as itemID, u.*, ii.url, o.id as offerID, o.addedAt as offerAdded,
+                                            o.quantity as forQuantity, ol.quantity as quantity
+                                            FROM OfferLists ol
+                                            LEFT JOIN Offers o ON ol.offerID = o.id
+                                            LEFT JOIN Items i ON ol.offerItemID = i.id
+											LEFT JOIN ItemImages ii ON ii.id = i.thumbImageID
+                                            LEFT JOIN Users u ON i.userID = u.id
+                                            WHERE $whereClause AND o.rejected = '0' AND o.endedAt IS NULL ORDER BY o.addedAt DESC");
+        }
+
+        if(is_array($rows)) {
+            return $rows;
+        }
+
+        return null;
+    }
+
+    public static function getOffer($offerID) {
+        $db = Database::getInstance();
+        $rows = null;
+
+        $offerID = (int)$offerID;
+
+        //Ugh so many joins.. TODO: Cut this back to what's necessary if applicable
+        $rows = $db->queryMultipleRows("SELECT i.*, i.id as itemID, ii.url, o.id as offerID,
+                                        o.quantity as forQuantity, ol.quantity as quantity
+                                        FROM OfferLists ol
+                                        LEFT JOIN Offers o ON ol.offerID = o.id
+                                        LEFT JOIN Items i ON ol.offerItemID = i.id
+                                        LEFT JOIN ItemImages ii ON ii.id = i.thumbImageID
+                                        WHERE o.id = '$offerID'");
+
+        if(is_array($rows)) {
+            return $rows;
+        }
+
+        return null;
+    }
+
+    public static function getOffersMadeByUser($userID, $timeFrame = -1, $status = "all") {
+        $db = Database::getInstance();
+        $rows = null;
+
+        $userID = (int)$userID;
+
+        if($timeFrame == -1) $timeFrame = strtotime("00:00"); //Midnight
+
+        $statusClause = "";
+
+        switch(strtolower($status)) {
+            case "pending":
+                $statusClause = "AND o.rejected = '0' AND o.endedAt IS NULL";
+                break;
+
+            case "accepted":
+                $statusClause = "AND o.rejected = '0' AND o.endedAt IS NOT NULL";
+                break;
+
+            case "declined":
+                $statusClause = "AND o.rejected = '1' AND o.endedAt IS NOT NULL";
+                break;
+        }
+
+        if($userID > 0) {
+            //Ugh so many joins
+            $rows = $db->queryMultipleRows("SELECT i.*, i.id as itemID, u.*, ii.url, o.id as offerID,
+                                            o.addedAt as offerAdded, o.quantity as forQuantity, o.itemID as offerItemID,
+                                            o.rejected, o.endedAt, ol.quantity as quantity, o.transactionID, o.userID as userID, o.offerUserID as offerUserID
+                                            FROM OfferLists ol
+                                            LEFT JOIN Offers o ON ol.offerID = o.id
+                                            LEFT JOIN Items i ON ol.offerItemID = i.id
+                                            LEFT JOIN ItemImages ii ON ii.id = i.thumbImageID
+                                            LEFT JOIN Users u ON o.userID = u.id
+                                            WHERE o.offerUserID = '$userID' AND UNIX_TIMESTAMP(o.addedAt) > '$timeFrame'
+                                            $statusClause
+                                            ORDER BY o.addedAt DESC");
+        }
+
+        if(is_array($rows)) {
+            return $rows;
+        }
+
+        return null;
+    }
+
+    public static function getOffersMadeToUser($userID, $timeFrame = -1, $status = "all") {
+        $db = Database::getInstance();
+        $rows = null;
+
+        $userID = (int)$userID;
+
+        if($timeFrame == -1) $timeFrame = strtotime("00:00"); //Midnight
+
+        $statusClause = "";
+
+        switch(strtolower($status)) {
+            case "pending":
+                $statusClause = "AND o.rejected = '0' AND o.endedAt IS NULL";
+                break;
+
+            case "accepted":
+                $statusClause = "AND o.rejected = '0' AND o.endedAt IS NOT NULL";
+                break;
+
+            case "declined":
+                $statusClause = "AND o.rejected = '1' AND o.endedAt IS NOT NULL";
+                break;
+        }
+
+        if($userID > 0) {
+            //Ugh so many joins
+            $rows = $db->queryMultipleRows("SELECT i.*, i.id as itemID, u.*, ii.url, o.id as offerID,
+                                            o.addedAt as offerAdded, o.quantity as forQuantity, o.itemID as offerItemID,
+                                            o.rejected, o.endedAt, ol.quantity as quantity, o.transactionID, o.userID as offerUserID, o.offerUserID as userID
+                                            FROM OfferLists ol
+                                            LEFT JOIN Offers o ON ol.offerID = o.id
+                                            LEFT JOIN Items i ON ol.offerItemID = i.id
+                                            LEFT JOIN ItemImages ii ON ii.id = i.thumbImageID
+                                            LEFT JOIN Users u ON o.offerUserID = u.id
+                                            WHERE o.userID = '$userID' AND UNIX_TIMESTAMP(o.addedAt) > '$timeFrame'
+                                            $statusClause
+                                            ORDER BY o.addedAt DESC");
+        }
+
+        if(is_array($rows)) {
+            return $rows;
+        }
+
+        return null;
+    }
+
+    public static function getNumOffersForItem($item) {
+        $db = Database::getInstance();
+        $row = null;
+        $whereClause = null;
+
+        if(is_numeric($item)) {
+            $whereClause = "o.itemID = '$item'";
+        } elseif(is_array($item) && isset($item['id']) && is_numeric($item['id'])) {
+            $item['id'] = (int)$item['id'];
+
+            if($item['id'] > 0) {
+                $whereClause = "o.itemID = '{$item['id']}'";
+            }
+        }
+
+        if(!is_null($whereClause)) {
+            $row = $db->querySingleRow("SELECT COUNT(*) as numOffers FROM Offers o WHERE $whereClause AND o.rejected = '0' AND o.endedAt IS NULL");
+        }
+
+        if(is_array($row)) {
+            return $row['numOffers'];
+        }return 0;
+    }
+
+    public static function getNumOffersByUser($user, $item) {
+        $db = Database::getInstance();
+        $row = null;
+        $whereClause = null;
+
+        if(isset($user) && isset($item)) {
+            if(is_numeric($item)) {
+                $whereClause = "o.itemID = '$item'";
+            } elseif(is_array($item) && isset($item['id']) && is_numeric($item['id'])) {
+                $item['id'] = (int)$item['id'];
+
+                if($item['id'] > 0) {
+                    $whereClause = "o.itemID = '{$item['id']}'";
+                }
+            }
+
+            if(is_numeric($user)) {
+                $whereClause .= " AND o.offerUserID = '$user'";
+            } elseif(is_array($user) && isset($user['id']) && is_numeric($user['id'])) {
+                $user['id'] = (int)$user['id'];
+
+                if($user['id'] > 0) {
+                    $whereClause .= " AND o.offerUserID = '{$user['id']}'";
+                }
+            }
+
+            if(!is_null($whereClause)) {
+                $row = $db->querySingleRow("SELECT COUNT(*) as numOffers FROM Offers o WHERE $whereClause AND o.rejected = '0' AND o.endedAt IS NULL");
+            }
+
+            if(is_array($row)) {
+                return $row['numOffers'];
+            } else return 0;
+        }
+
+        return null;
+    }
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Manipulation Functions
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    //TODO
+}

@@ -1,0 +1,369 @@
+
+
+namespace TradeOnUp\API;
+
+use Luracast\Restler\RestException;
+use TradeOnUp\Core\BBCode;
+use TradeOnUp\Core\Database;
+use TradeOnUp\Core\Sphinx;
+use TradeOnUp\Core\HashID;
+use TradeOnUp\Core\Log;
+use TradeOnUp\Core\Core;
+use TradeOnUp\Core\Validate;
+use TradeOnUp\Models\Notifications;
+use TradeOnUp\Models\Users;
+use TradeOnUp\Models\Messages as messagesModel;
+
+/**
+ * API for access to user's messages, sending, deleting, replying, etc.
+ *
+ * Protected API. (Requires valid session)
+ *
+ * @access protected
+ */
+class Messages {
+    public function getList() {
+        $view = "in";
+
+        if(isset($_GET['view']) && strlen(trim($_GET['view'])) > 0) {
+            if(in_array(trim($_GET['view']), ["in", "sent", "trash"])) {
+                $view = trim($_GET['view']);
+            } else throw new RestException(400, "No such view.");
+        }
+
+        /* Array of database columns which should be read and sent back to DataTables. Use a space where
+         * you want to insert a non-database field (for example a counter or static image)
+         */
+        $aColumns = [];
+        if($view == "in") {
+            $aColumns = ['id', 'subject', "readAt", "fromUsername", 'sentAt'];
+        } elseif($view == "sent") {
+            $aColumns = ['id', 'subject', "NULL", "toUsername", 'sentAt'];
+        } elseif($view == "trash") {
+            $aColumns = ['id', 'subject', "NULL", "fromUsername", 'sentAt', "toUsername"];
+        }
+
+
+        /*
+         * Paging
+         */
+        $limitStart = null;
+        $limitLength = null;
+        if(isset($_GET['iDisplayStart']) && $_GET['iDisplayLength'] != '-1') {
+            $limitStart = $_GET['iDisplayStart'];
+            $limitLength = $_GET['iDisplayLength'];
+        }
+
+        /*
+         * Ordering
+         */
+        $orderList = null;
+        if(isset($_GET['iSortCol_0'])) {
+            $orderList = [];
+
+            for ($i=0; $i < (int)$_GET['iSortingCols']; $i++) {
+                if ($_GET['bSortable_' . (int)$_GET['iSortCol_' . $i]] == "true") {
+                    $orderList[] = [
+                        "col" => $aColumns[(int)$_GET['iSortCol_'.$i]],
+                        "dir" => strtoupper(trim($_GET['sSortDir_'.$i])) == "DESC" ? "DESC" : "ASC"
+                    ];
+                }
+            }
+        }
+
+
+        /*
+         * Filtering
+         */
+        $idList = null;
+        if($_GET['sSearch'] != "") {
+            $idList = [];
+            $sphinx = Sphinx::getInstance();
+
+            if($view == "in") {
+                $sphinx->SetFilter('toUserID', [$_SESSION['userID']]);
+                $sphinx->SetFilter('toRemove', [0]);
+                $sphinx->SetFilter('toDeleted', [0]);
+            } elseif($view == "sent") {
+                $sphinx->SetFilter('fromUserID', [$_SESSION['userID']]);
+                $sphinx->SetFilter('fromRemove', [0]);
+                $sphinx->SetFilter('fromDeleted', [0]);
+            } elseif($view == "trash") {
+                $trashInbox = [];
+                $trashOutbox = [];
+
+                $sphinx->SetFilter('toUserID', [$_SESSION['userID']]);
+                $sphinx->SetFilter('toRemove', [0]);
+                $sphinx->SetFilter('toDeleted', [1]);
+                $trashInbox = $sphinx->checkKeyword($_GET['sSearch'], "messages");
+                $sphinx->ResetFilters();
+
+                $sphinx->SetFilter('fromUserID', [$_SESSION['userID']]);
+                $sphinx->SetFilter('fromRemove', [0]);
+                $sphinx->SetFilter('fromDeleted', [1]);
+                $trashOutbox = $sphinx->checkKeyword($_GET['sSearch'], "messages");
+                $sphinx->ResetFilters();
+
+                if(!is_array($trashInbox)) $trashInbox = [];
+                if(!is_array($trashOutbox)) $trashOutbox = [];
+
+                $idList = array_merge($trashInbox, $trashOutbox);
+            }
+
+            if($view != "trash") {
+                $idList = $sphinx->checkKeyword($_GET['sSearch'], "messages");
+                $sphinx->ResetFilters();
+            }
+        }
+
+        /*
+         * Get data to display
+         */
+        $outRows = messagesModel::getMessagesForUser_dataTables($_SESSION['userID'], $view, $aColumns, $orderList, $idList, $limitStart, $limitLength);
+        $numUnread = messagesModel::getUnreadCount($_SESSION['userID']);
+
+        if(is_array($outRows)) {
+            /*
+             * Output
+             */
+            $output = [
+                "sEcho" => (int)$_GET['sEcho'],
+                "iTotalRecords" => $outRows['dataCount'],
+                "iTotalDisplayRecords" => $outRows['filterCount'],
+                "iUnread" => is_numeric($numUnread) ? $numUnread : 0,
+                "aaData" => []
+            ];
+
+            $hashIds = HashID::getInstance();
+
+            foreach($outRows['data'] as $aRow) {
+                $row = [];
+
+                for($i=0; $i<count($aColumns); $i++) {
+                    if($aColumns[$i] == 'id') {
+                        $row[] = $hashIds->encrypt($aRow[$aColumns[$i]]);
+                    } elseif($aColumns[$i] != ' ') {
+                        /* General output */
+                        $row[] = $aRow[$aColumns[$i]];
+                    }
+                }
+
+                $output['aaData'][] = $row;
+            }
+
+            return $output;
+        }
+
+        $noRecords = [
+            "sEcho" => (int)@$_GET['sEcho'],
+            "iTotalRecords" => 0,
+            "iTotalDisplayRecords" => 0,
+            "iUnread" => is_numeric($numUnread) ? $numUnread : 0,
+            "aaData" => []
+        ];
+
+        return $noRecords;
+    }
+
+    public function getUnread() {
+        $numUnread = messagesModel::getUnreadCount($_SESSION['userID']);
+        if($numUnread < 0) $numUnread = 0;
+
+        return (int)$numUnread;
+    }
+
+    public function putState($request_data = null) {
+        if(!isset($request_data['ids']) || !isset($request_data['action']) || !is_array($request_data['ids'])) {
+            throw new RestException(412, "Missing required parameters.");
+        }
+
+        $db = Database::getInstance();
+        $action = trim($request_data['action']);
+
+        //Ensure the action is valid.
+        if(!in_array($action, ['delete', 'restore', 'remove', 'read', 'unread'])) {
+            throw new RestException(400, "Invalid action.");
+        }
+
+        if(sizeof($request_data['ids']) > 500) {
+            throw new RestException(400, "Cannot modify more than 500 messages per request.");
+        }
+
+        $hashIds = HashID::getInstance();
+        $msgIds = $hashIds->decrypt_multi($request_data['ids']);
+        $ownership = [];
+
+        $db->begin_transaction();
+
+        if($msgs = Validate::messagesOwner($msgIds, $_SESSION['userID'], $ownership)) {
+            //Breaks up the update into pieces based on ownership
+            $_splitUpdate = function($idList, $value, $fieldFrom, $fieldTo) use($ownership) {
+                $splitIDs = [
+                    "to" => [],
+                    "from" => []
+                ];
+                $updatedTo = false;
+                $updatedFrom = false;
+
+                if(!isset($value)) return null;
+
+                for($i=0; $i < sizeof($idList); $i++) {
+                    if(isset($ownership[$i]['from']) && $ownership[$i]['from'] == true) {
+                        $splitIDs['from'][] = $idList[$i];
+                    }
+
+                    if(isset($ownership[$i]['to']) && $ownership[$i]['to'] == true) {
+                        $splitIDs['to'][] = $idList[$i];
+                    }
+                }
+
+                if(sizeof($splitIDs['to']) > 0 && isset($fieldTo)) {
+                    $splitIDs['to'][0][$fieldTo] = $value;
+                    if(messagesModel::updateMultiple($splitIDs['to'], $fieldTo)) {
+                        $updatedTo = true;
+                    }
+                }
+
+                if(sizeof($splitIDs['from']) > 0 && isset($fieldFrom)) {
+                    $splitIDs['from'][0][$fieldFrom] = $value;
+                    if(messagesModel::updateMultiple($splitIDs['from'], $fieldFrom)) {
+                        $updatedFrom = true;
+                    }
+                }
+
+                return ($updatedTo || $updatedFrom);
+            };
+
+
+            //Execute requested action
+            if($action == "delete") { //Move to trash
+                if($_splitUpdate($msgs, 1, "fromDeleted", "toDeleted")) {
+                    $db->commit();
+                    return true;
+                }
+            } elseif($action == "remove") { //Remove (from trash) - just hides the message technically.
+                if($_splitUpdate($msgs, 1, "fromRemove", "toRemove")) {
+                    $db->commit();
+                    return true;
+                }
+            } elseif($action == "restore") { //Restore (from trash)
+                if($_splitUpdate($msgs, 0, "fromDeleted", "toDeleted")) {
+                    $db->commit();
+                    return true;
+                }
+            } elseif($action == "read" || $action == "unread") { //Mark as read/unread
+                $markIDs = [];
+
+                for($i=0; $i < sizeof($msgs); $i++) {
+                    if(isset($ownership[$i]['to']) && $ownership[$i]['to'] == true) {
+                        $markIDs[] = $msgs[$i];
+                    }
+                }
+
+                if(sizeof($markIDs) > 0) {
+                    if($action == "read") {
+                        $markIDs[0]['readAt'] = Core::mysqlTimestamp();
+                    } else $markIDs[0]['readAt'] = null;
+
+                    if(messagesModel::updateMultiple($markIDs, "readAt")) {
+                        $db->commit();
+                        return true;
+                    }
+                }
+            } else throw new RestException(500, "Invalid action."); //Shouldn't be able to get here.
+        } else throw new RestException(403, "Ownership invalid.");
+
+        return false;
+    }
+
+    public function deleteTrash() {
+        if(messagesModel::emptyTrash($_SESSION['userID'])) {
+            return true;
+        }
+
+        return false;
+    }
+
+    public function get($msgID) {
+        $hashIds = HashID::getInstance();
+        $msgID = $hashIds->decrypt($msgID);
+        $ownership = [];
+
+        if($msg = Validate::messageOwner($msgID, $_SESSION['userID'], $ownership)) {
+            $bbcode = new BBCode($msg['message']);
+            $cleanMessage = $bbcode->asHtml();
+
+            $retVal = [
+                "subject" => is_null($msg['subject']) ? "[No subject]" : $msg['subject'],
+                "msg" => $cleanMessage,
+                "orig" => $msg['message'],
+                "sentAt" => $msg['sentAt']
+            ];
+
+            $unreadMsgs = messagesModel::getUnreadCount($_SESSION['userID']);
+            if((int)$unreadMsgs < 0) $unreadMsgs = 0;
+
+            $retVal['unread'] = $unreadMsgs;
+
+            if(@$ownership['to']) {
+                if($msg['toRemove']) throw new RestException(404, "Message not found");
+
+                //If this message was unread, mark it as read.
+                if($msg['readAt'] == 0) {
+                    $msg['readAt'] = Core::mysqlTimestamp();
+
+                    messagesModel::update($msg, "readAt");
+
+                    $retVal['unread'] = (int)$retVal['unread'] - 1;
+                }
+
+                $retVal['from'] = $msg['fromUsername'];
+                $retVal['inTrash'] = $msg['toDeleted'];
+            } elseif(@$ownership['from']) {
+                if($msg['fromRemove']) throw new RestException(404, "Message not found");
+
+                $retVal['to'] = $msg['toUsername'];
+                $retVal['inTrash'] = $msg['fromDeleted'];
+            }
+
+            return $retVal;
+        } else throw new RestException(403, "Ownership invalid.");
+    }
+
+    public function post($request_data = null) {
+        if(!isset($request_data['to']) ||
+            !isset($request_data['msg'])) {
+            throw new RestException(412, "Missing required parameters.");
+        }
+
+        $db = Database::getInstance();
+
+        $to = $request_data['to'];
+
+        $db->begin_transaction();
+
+        if($toUser = Users::getUser($to)) {
+            $subject = (isset($request_data['subject']) && strlen(trim($request_data['subject'])) > 0) ? htmlspecialchars(trim($request_data['subject'])) : null;
+            $message = htmlspecialchars(trim($request_data['msg']));
+
+            $msgData = [
+                "fromUserID" => $_SESSION['userID'],
+                "toUserID" => $toUser['id'],
+                "subject" => $subject,
+                "message" => $message,
+                "sentAt" => Core::mysqlTimestamp()
+            ];
+
+            if(messagesModel::insert($msgData)) {
+                //Message was added, now let's add a notification.
+                if(Notifications::addMessageNotification($toUser['id'], $_SESSION['userID'])) {
+                    //Notification was added. TODO: Handle failure more intelligently
+                }
+
+                $db->commit();
+
+                return true;
+            } else throw new RestException(500, "Database failure.");
+        } else throw new RestException(400, "No such user.");
+    }
+}

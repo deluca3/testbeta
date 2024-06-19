@@ -1,0 +1,13 @@
+
+/**
+ * Copyright 2013 Trade On Up LLC.
+ * Originally written by Gage on 12/2/13
+ */
+
+namespace TradeOnUp\Core;
+
+class Utility {
+    public static function gravatarHash($email) {
+        return md5(strtolower(trim($email)));
+    }
+} 

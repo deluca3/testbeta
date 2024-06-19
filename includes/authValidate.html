@@ -1,0 +1,39 @@
+
+
+require('/tou/vendor/restler.php');
+include_once("/tou/includes/Database.php");
+include_once("/tou/includes/Log.php");
+include_once("/tou/api/v1/Authenticate.php");
+
+use TradeOnUp\Core\Database;
+use TradeOnUp\API\Authenticate;
+use TradeOnUp\Core\Log;
+
+if(!isset($_doRedirect)) $_doRedirect = false;
+if(!isset($_returnToPath)) $_returnToPath = true;
+
+if(!@$_SESSION['auth']) {
+    //Remembered login check
+    if(isset($_COOKIE['rememberMe'])) {
+        $auth = new Authenticate();
+
+        if(!$auth->__validateCookieLogin($_loginRedirect) && $_doRedirect) {
+            header("Location: /login");
+            exit();
+        }
+    } else {
+        if($_doRedirect) {
+            header("Location: /login");
+            exit();
+        }
+    }
+} else {
+    $auth = new Authenticate();
+
+    if(!$auth->__isAllowed() && $_doRedirect) {
+        $currentPath = urlencode($_SERVER['REQUEST_URI']);
+
+        header("Location: /login" . ($_returnToPath ? "?path=$currentPath" : ""));
+        exit();
+    }
+}

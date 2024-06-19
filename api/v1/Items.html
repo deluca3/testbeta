@@ -1,0 +1,386 @@
+
+/**
+ * Copyright 2013 Trade On Up LLC.
+ * Originally written by Gage on 10/9/13
+ */
+
+namespace TradeOnUp\API;
+
+use Luracast\Restler\RestException;
+use TradeOnUp\Models\Categories;
+use TradeOnUp\Models\Feeds;
+use TradeOnUp\Models\Users;
+use TradeOnUp\Models\Items as itemsModel;
+use TradeOnUp\Models\ItemImages;
+use TradeOnUp\Models\Offers;
+use TradeOnUp\Models\ItemWatch;
+use TradeOnUp\Core\Core;
+use TradeOnUp\Core\HashID;
+use TradeOnUp\Core\Validate;
+use TradeOnUp\Core\Log;
+use TradeOnUp\Core\Solr;
+
+class Items {
+    protected function getCategory($catID = null) {
+        $hashIDs = HashID::getInstance();
+
+        if(is_null($catID)) { //Get top-tier categories
+            if($categories = Categories::getTopTierCategories()) {
+                $categories = $hashIDs->encrypt_keys($categories);
+
+                return $categories;
+            } else throw new RestException(404, "No categories found.");
+        } else { //Have category ID
+            $catID = $hashIDs->decrypt($catID);
+
+            if($categories = Categories::getCategoriesWithParent($catID)) {
+                $categories = $hashIDs->encrypt_keys($categories);
+
+                return $categories;
+            } else throw new RestException(404, "No categories found.");
+        }
+    }
+
+    protected function getWatch() {
+        $watchItems = ItemWatch::getWatchedForUser($_SESSION['userID']);
+        $retVal = [];
+
+        //Loop through items, expose necessary data
+        if(is_array($watchItems)) {
+            $hashIDs = HashID::getInstance();
+
+            for($currentItem = 0; $currentItem < sizeof($watchItems); $currentItem++) {
+                Core::copyArrayElements($watchItems[$currentItem], $retVal[$currentItem], "id, name, description, listed, quantity");
+
+                //Hash the ID
+                $retVal[$currentItem]['id'] = $hashIDs->encrypt($retVal[$currentItem]['id']);
+
+                //Expose thumbnail image as well
+                if(!is_null($watchItems[$currentItem]['thumbImageID'])) {
+                    $imageThumb = ItemImages::getById($watchItems[$currentItem]['thumbImageID']);
+
+                    if(is_array($imageThumb)) {
+                        Core::copyArrayElements($imageThumb, $retVal[$currentItem]['thumbnail'], "url");
+                    }
+                }
+            }
+        }
+
+        return $retVal;
+    }
+
+    protected function postWatch($itemID) {
+        $hashIDs = HashID::getInstance();
+        $itemID = $hashIDs->decrypt($itemID);
+
+        $watchItem = [
+            "userID" => $_SESSION['userID'],
+            "itemID" => $itemID,
+            "addedOn" => Core::mysqlTimestamp()
+        ];
+
+        if(ItemWatch::insert($watchItem)) {
+            return true;
+        } else throw new RestException(500, "Database failure.");
+    }
+
+    protected function deleteWatch($itemID) {
+        $hashIDs = HashID::getInstance();
+        $itemID = $hashIDs->decrypt($itemID);
+
+        if(ItemWatch::deleteWatchForUser($_SESSION['userID'], $itemID)) {
+            return true;
+        } else throw new RestException(404, "Item not watched.");
+    }
+
+    function getListed() {
+        if(isset($_GET['user'])) {
+            $userItems = itemsModel::getItemsForUser($_GET['user'], true); //Grab user's listed items.
+            $retVal = [];
+
+            //Loop through items, expose necessary data
+            if(is_array($userItems)) {
+                $hashIDs = HashID::getInstance();
+
+                for($currentItem = 0; $currentItem < sizeof($userItems); $currentItem++) {
+                    Core::copyArrayElements($userItems[$currentItem], $retVal[$currentItem], "id, name, description, quantity, buyNow");
+
+                    //Hash the ID
+                    $retVal[$currentItem]['id'] = $hashIDs->encrypt($retVal[$currentItem]['id']);
+
+                    //Expose thumbnail image as well
+                    if(!is_null($userItems[$currentItem]['thumbImageID'])) {
+                        $imageThumb = ItemImages::getById($userItems[$currentItem]['thumbImageID']);
+
+                        if(is_array($imageThumb)) {
+                            Core::copyArrayElements($imageThumb, $retVal[$currentItem]['thumbnail'], "url");
+                        }
+                    }
+                }
+            } else throw new RestException(404, "Cannot find user/items.");
+
+            return $retVal;
+        } else throw new RestException(412, "Missing parameters");
+    }
+
+    function getRandomItems() {
+        $numItems = 1;
+
+        if(isset($_GET['user'])) {
+            if(isset($_GET['numItems']) && (int)$_GET['numItems'] > 0) {
+                $numItems = (int)$_GET['numItems'];
+
+                if($numItems > 20) $numItems = 20;
+            }
+
+            $userItems = itemsModel::getRandomItems($numItems, $_GET['user']); //Grab random items for user.
+            $retVal = [];
+
+            //Loop through items, expose necessary data
+            if(is_array($userItems)) {
+                $hashIDs = HashID::getInstance();
+
+                for($currentItem = 0; $currentItem < sizeof($userItems); $currentItem++) {
+                    Core::copyArrayElements($userItems[$currentItem], $retVal[$currentItem], "id, name, description, quantity");
+
+                    //Hash the ID
+                    $retVal[$currentItem]['id'] = $hashIDs->encrypt($retVal[$currentItem]['id']);
+
+                    //Expose thumbnail image as well
+                    if(!is_null($userItems[$currentItem]['thumbImageID'])) {
+                        $imageThumb = ItemImages::getById($userItems[$currentItem]['thumbImageID']);
+
+                        if(is_array($imageThumb)) {
+                            Core::copyArrayElements($imageThumb, $retVal[$currentItem]['thumbnail'], "url");
+                        }
+                    }
+                }
+            } else throw new RestException(404, "Cannot find user/items.");
+
+            return $retVal;
+        } else throw new RestException(412, "Missing parameters");
+
+        //TODO: Possibly add way if no user is passed in to query random items from entire table.
+    }
+
+    protected function getItem() {
+        $retVal = [];
+
+        if(isset($_GET['id'])) {
+            $hashIDs = HashID::getInstance();
+            $itemID = $hashIDs->decrypt($_GET['id']);
+
+            $item = itemsModel::getById($itemID);
+
+            if(is_array($item)) {
+                Core::copyArrayElements($item, $retVal, "id, name, description, itemCondition, tags, listed, quantity, category, allowTrades, allowCash, buyNow, travelDistance, shipTimeframe");
+
+                //Get category name
+                if(!is_null($item['category'])) {
+                    $category = Categories::getById($item['category']);
+
+                    if(is_array($category)) {
+                        $retVal['category'] = [
+                            "id" => $item['category'],
+                            "name" => $category['name'],
+                        ];
+                    }
+                }
+
+                //Expose thumbnail
+                if(!is_null($item['thumbImageID'])) {
+                    $imageThumb = ItemImages::getById($item['thumbImageID']);
+
+                    if(is_array($imageThumb)) {
+                        Core::copyArrayElements($imageThumb, $retVal['thumbnail'], "isThumb, url");
+                    }
+                }
+
+                //Expose other images if requested
+                if(isset($_GET['withImages']) && $_GET['withImages'] == 1) {
+                    $itemImages = ItemImages::getByField($itemID, "itemID");
+
+                    if(is_array($itemImages)) {
+                        foreach($itemImages as $itemImage) {
+                            if(is_null($itemImage['isThumb'])) {
+                                Core::copyArrayElements($itemImage, $retVal['images'], "id, url", null, true);
+                            }
+                        }
+                    }
+                }
+
+                //Are they the owner?
+                if(Validate::itemOwner($item, $_SESSION['userID'])) {
+                    $retVal['isOwner'] = true;
+                } else {
+                    $owner = Users::getUser($item['userID'], true);
+
+                    if(is_array($owner)) {
+                        Core::copyArrayElements($owner, $retVal['owner'], "username, location");
+                    }
+                }
+
+                //Is it watched?
+                if(ItemWatch::isWatched($_SESSION['userID'], $itemID)) {
+                    $retVal['watched'] = true;
+                }
+
+                //Hash IDs
+                $retVal = $hashIDs->encrypt_keys($retVal, "id, isThumb");
+            } else throw new RestException(404, "No such item found");
+        } else throw new RestException(412, "Missing required parameters");
+
+        return $retVal;
+    }
+
+    protected function get($offersAtTop = false) {
+        $userItems = itemsModel::getItemsForUser($_SESSION['username'], false, $offersAtTop); //Grab user's items.
+        $retVal = [];
+
+        //Loop through items, expose necessary data
+        if(is_array($userItems)) {
+            $hashIDs = HashID::getInstance();
+
+            for($currentItem = 0; $currentItem < sizeof($userItems); $currentItem++) {
+                Core::copyArrayElements($userItems[$currentItem], $retVal[$currentItem], "id, name, description, listed, quantity, buyNow");
+
+                //Hash the ID
+                $retVal[$currentItem]['id'] = $hashIDs->encrypt($retVal[$currentItem]['id']);
+
+                //Expose thumbnail image as well
+                if(!is_null($userItems[$currentItem]['thumbImageID'])) {
+                    $imageThumb = ItemImages::getById($userItems[$currentItem]['thumbImageID']);
+
+                    if(is_array($imageThumb)) {
+                        Core::copyArrayElements($imageThumb, $retVal[$currentItem]['thumbnail'], "url");
+                    }
+                }
+
+                //Get number of offers
+                $numOffers = Offers::getNumOffersForItem($userItems[$currentItem]);
+
+                if(!is_null($numOffers) && $numOffers > 0) {
+                    $retVal[$currentItem]['offers'] = $numOffers;
+                }
+            }
+        }
+
+        return $retVal;
+    }
+
+    protected function post($request_data = null) {
+        if( isset($request_data['name']) &&
+            isset($request_data['description']) &&
+            isset($request_data['itemCondition']) ) {
+
+            $hashIDs = HashID::getInstance();
+            $request_data['category'] = $hashIDs->decrypt($request_data['category']);
+
+            Core::copyArrayElements($request_data, $newItem, "name, description, tags, itemCondition, listed, quantity, category, allowTrades, allowCash, buyNow, travelDistance, shipTimeframe");
+
+            if(Validate::itemContents($newItem)) {
+                $newItem['userID'] = $_SESSION['userID'];
+                $newItem['addedAt'] = Core::mysqlTimestamp();
+
+                if(strlen($newItem['buyNow']) == 0) $newItem['buyNow'] = null;
+
+                if($itemID = itemsModel::insert($newItem)) {
+                    $hashIDs = HashID::getInstance();
+
+                    if($newItem['listed'] == 1) {
+                        //Add feed item
+                        if(Feeds::addUpload($_SESSION['userID'], $itemID)) {
+                            //Feed item added.
+                        }
+                    }
+
+                    //Add to search index
+                    $solr = new Solr();
+
+                    $newItem['id'] = $itemID;
+                    $newItem['addedAt'] = $solr->solrTimestamp($newItem['addedAt']);
+
+                    $solr->addDocuments($newItem, true);
+
+                    return $hashIDs->encrypt($itemID);
+                } else throw new RestException(500, "Database failure");
+            }
+        } throw new RestException(412, "Missing required parameters");
+    }
+
+    protected function put($request_data = null) {
+        if(isset($request_data['id'])) {
+            $hashIDs = HashID::getInstance();
+            $request_data = $hashIDs->decrypt_array($request_data, "id, category");
+
+            Core::copyArrayElements($request_data, $updatedItem, "id, name, description, tags, itemCondition, listed, quantity, category, allowTrades, allowCash, buyNow, travelDistance, shipTimeframe");
+
+            if($itemData = Validate::itemOwner($updatedItem, $_SESSION['userID'])) {
+                if(strlen($updatedItem['buyNow']) == 0) $updatedItem['buyNow'] = null;
+
+                //Do actual item update
+                if(itemsModel::update($updatedItem) &&
+                    !isset($request_data['deleteImages']) &&
+                    !isset($request_data['thumbID'])) {
+
+                    //Update search index
+                    $solr = new Solr();
+
+                    if(isset($updatedItem['addedAt'])) {
+                        $updatedItem['addedAt'] = $solr->solrTimestamp($updatedItem['addedAt']);
+                    }
+
+                    $solr->addDocuments($updatedItem, true);
+
+                    return true;
+                }
+
+                //Delete any images that we were asked to
+                if(isset($request_data['deleteImages']) && is_array($request_data['deleteImages'])) {
+                    $deletedImages = $hashIDs->decrypt_multi($request_data['deleteImages']);
+
+                    if($didImgDelete = ItemImages::delete($deletedImages, $_SESSION['userID'])) {
+                        if(!isset($request_data['thumbID'])) {
+                            return true;
+                        }
+                    } elseif(is_null($didImgDelete)) throw new RestException(403, "Image ownership invalid");
+                }
+
+                //Set thumbnail to a server-side image if requested
+                if(isset($request_data['thumbID'])) {
+                    $request_data['thumbID'] = $hashIDs->decrypt($request_data['thumbID']);
+
+                    if((int)$request_data['thumbID'] != (int)$itemData['thumbImageID']) {
+                        $imgAPI = new Image();
+
+                        if($imgAPI->__setItemThumbAs($updatedItem['id'], $request_data['thumbID'])) { //TODO: Why did I do this? (Possible dumb function, look into this.)
+                            return true;
+                        } else throw new RestException(500, "Failed to set item thumbnail");
+                    }
+                }
+            } else throw new RestException(403, "Ownership invalid");
+        } else throw new RestException(412, "Missing required parameters");
+
+        return false;
+    }
+
+    protected function delete($id) {
+        if(isset($id) && 1 == 2) { //TODO: Rewrite delete to keep item around, but mark as "removed". Remove images after a period of time to save space.
+            $hashIDs = HashID::getInstance();
+            $id = $hashIDs->decrypt($id);
+
+            $deleteItem = ['id' => $id];
+
+            if(Validate::itemOwner($deleteItem, $_SESSION['userID'])) {
+                if(itemsModel::deleteItemAndImages($deleteItem)) {
+
+                    $solr = new Solr();
+
+                    $solr->deleteDocuments($deleteItem, true);
+
+                    return true;
+                } else throw new RestException(500, "Database failure");
+            } else throw new RestException(403, "Ownership invalid");
+        } else throw new RestException(412, "Missing required parameters");
+    }
+}

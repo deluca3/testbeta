@@ -1,0 +1,111 @@
+
+/**
+ * Copyright 2013 Trade On Up LLC.
+ * Originally written by Gage on 12/2/13
+ */
+
+namespace TradeOnUp\Models;
+
+use TradeOnUp\Core\Database;
+use TradeOnUp\Core\Log;
+
+class Followers extends Model {
+
+    public static function getFollowerCount($userID) {
+        $db = Database::getInstance();
+
+        $userID = (int)$userID;
+
+        $followers = $db->querySingleValue("SELECT COUNT(f.id) FROM Followers f WHERE f.followUserID = '$userID'");
+
+        if(!is_null($followers)) {
+            return $followers;
+        }
+
+        return null;
+    }
+
+    public static function getFollowedCount($userID) {
+        $db = Database::getInstance();
+
+        $userID = (int)$userID;
+
+        $followed = $db->querySingleValue("SELECT COUNT(f.id) FROM Followers f WHERE f.userID = '$userID'");
+
+        if(!is_null($followed)) {
+            return $followed;
+        }
+
+        return null;
+    }
+
+    public static function getFollowersForUser($userID, $start = 0, $limit = 0) {
+        $db = Database::getInstance();
+
+        $userID = (int)$userID;
+        $start = (int)$start;
+        $limit = (int)$limit;
+
+        $limitClause = "";
+        if($start && $limit) {
+            $limitClause = "LIMIT $start, $limit";
+        }
+
+        $followers = $db->queryMultipleRows("SELECT u.* FROM Followers f LEFT JOIN Users u ON f.userID = u.id WHERE f.followUserID = '$userID' $limitClause");
+
+        if(is_array($followers)) {
+            return $followers;
+        }
+
+        return null;
+    }
+
+    public static function getFollowedByUser($userID, $start = 0, $limit = 0) {
+        $db = Database::getInstance();
+
+        $userID = (int)$userID;
+        $start = (int)$start;
+        $limit = (int)$limit;
+
+        $limitClause = "";
+        if($start && $limit) {
+            $limitClause = "LIMIT $start, $limit";
+        }
+
+        $followed = $db->queryMultipleRows("SELECT u.* FROM Followers f LEFT JOIN Users u ON f.followUserID = u.id WHERE f.userID = '$userID' $limitClause");
+
+        if(is_array($followed)) {
+            return $followed;
+        }
+
+        return null;
+    }
+
+    public static function deleteFollowerForUser($userID, $followUserID) {
+        $db = Database::getInstance();
+
+        $userID = (int)$userID;
+        $followUserID = (int)$followUserID;
+
+        if($db->queryAffected("DELETE FROM Followers WHERE userID = '$userID' AND followUserID = '$followUserID' LIMIT 1")) {
+            return true;
+        }
+
+        return false;
+    }
+
+    public static function isFollowing($userID, $followUserID) {
+        $db = Database::getInstance();
+
+        $userID = (int)$userID;
+        $followUserID = (int)$followUserID;
+
+        $followData = $db->querySingleRow("SELECT id FROM Followers WHERE userID = '$userID' AND followUserID = '$followUserID' LIMIT 1");
+
+        if(is_array($followData)) {
+            return true;
+        }
+
+        return false;
+    }
+} 

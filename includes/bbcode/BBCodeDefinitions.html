@@ -1,0 +1,93 @@
+
+/**
+ * Copyright 2013 Trade On Up LLC.
+ * Originally written by Gage on 11/6/13
+ */
+
+namespace TradeOnUp\Core\BBCode;
+
+include("/tou/includes/bbcode/EmailValidator.php");
+
+use JBBCode\CodeDefinitionSet;
+use JBBCode\CodeDefinitionBuilder;
+use JBBCode\validators\UrlValidator;
+use JBBCode\validators\EmailValidator;
+
+/**
+ * Provides primary set of TOU bbcode rules
+ *
+ * @author Greg Gage
+ */
+class BBCodeDefinitions implements CodeDefinitionSet
+{
+
+    /* The default code definitions in this set. */
+    protected $definitions = array();
+
+    /**
+     * Constructs the default code definitions.
+     */
+    public function __construct()
+    {
+        /* [b] bold tag */
+        $builder = new CodeDefinitionBuilder('b', '<strong>{param}</strong>');
+        array_push($this->definitions, $builder->build());
+
+        /* [i] italics tag */
+        $builder = new CodeDefinitionBuilder('i', '<em>{param}</em>');
+        array_push($this->definitions, $builder->build());
+
+        /* [u] italics tag */
+        $builder = new CodeDefinitionBuilder('u', '<span style="text-decoration: underline;">{param}</span>');
+        array_push($this->definitions, $builder->build());
+
+        /* [ul] unordered list tag */
+        $builder = new CodeDefinitionBuilder('ul', '<ul>{param}</ul>');
+        array_push($this->definitions, $builder->build());
+
+        /* [ol] ordered list tag */
+        $builder = new CodeDefinitionBuilder('ol', '<ol>{param}</ol>');
+        array_push($this->definitions, $builder->build());
+
+        /* [li] list item tag */
+        $builder = new CodeDefinitionBuilder('li', '<li>{param}</li>');
+        array_push($this->definitions, $builder->build());
+
+        /* [quote] block tag */
+        $builder = new CodeDefinitionBuilder('quote', '<blockquote class="bb_quote">{param}</blockquote>');
+        array_push($this->definitions, $builder->build());
+
+        $urlValidator = new UrlValidator();
+
+        /* [url] link tag */
+        $builder = new CodeDefinitionBuilder('url', '<a href="{param}">{param}</a>');
+        $builder->setParseContent(false)->setBodyValidator($urlValidator);
+        array_push($this->definitions, $builder->build());
+
+        /* [url=http://example.com] link tag */
+        $builder = new CodeDefinitionBuilder('url', '<a href="{option}">{param}</a>');
+        $builder->setUseOption(true)->setParseContent(true)->setOptionValidator($urlValidator);
+        array_push($this->definitions, $builder->build());
+
+        $emailValidator = new EmailValidator();
+
+        /* [email] link tag */
+        $builder = new CodeDefinitionBuilder('email', '<a href="mailto:{param}">{param}</a>');
+        $builder->setParseContent(false)->setBodyValidator($emailValidator);
+        array_push($this->definitions, $builder->build());
+
+        /* [email=user@domain.com] link tag */
+        $builder = new CodeDefinitionBuilder('email', '<a href="mailto:{option}">{param}</a>');
+        $builder->setUseOption(true)->setParseContent(true)->setOptionValidator($emailValidator);
+        array_push($this->definitions, $builder->build());
+    }
+
+    /**
+     * Returns an array of the default code definitions.
+     */
+    public function getCodeDefinitions()
+    {
+        return $this->definitions;
+    }
+
+}

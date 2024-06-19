@@ -1,0 +1,189 @@
+
+
+namespace TradeOnUp\Models;
+
+use TradeOnUp\Core\Database;
+use TradeOnUp\Core\Log;
+
+class Messages extends Model {
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Lookup Functions
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    public static function getMessagesForUser_dataTables($user, $view = "in", $cols = "*", $orderList = null, $idList = null, $start = -1, $length = -1) {
+        $db = Database::getInstance();
+
+        $start = (int)$start;
+        $length = (int)$length;
+
+        if($length > 500) $length = 500;
+        
+        $uid = null;
+
+        //Figure out what we were given and get the data we need regardless.
+        if(is_array($user) && isset($user['id']) && is_numeric($user['id'])) {
+            $user['id'] = (int)$user['id'];
+
+            $uid = $user['id'];
+        } elseif(is_numeric($user)) {
+            $uid = $user;
+        } elseif(is_string($user)) {
+            $uid = @Users::getUser($user)['id'];
+        }
+
+        if($uid) {
+            $limitClause = "";
+            $orderClause = "";
+            $whereClause = "";
+            $inClause = "";
+            $getCols = "*";
+
+            if(is_array($cols)) {
+                $getCols = "";
+
+                foreach($cols as $col) {
+                    if($col != ' ') {
+                        $getCols .= "$col,";
+                    }
+                }
+
+                $getCols = rtrim($getCols, ",");
+            }
+
+            if($view == "in") {
+                $whereClause = "toUserID = '$uid' AND toDeleted = 0 AND toRemove = 0";
+            } elseif($view == "sent") {
+                $whereClause = "fromUserID = '$uid' AND fromDeleted = 0 AND fromRemove = 0";
+            } elseif($view == "trash") {
+                $whereClause = "(toUserID = '$uid' AND toDeleted = 1 AND toRemove = 0) OR (fromUserID = '$uid' AND fromDeleted = 1 AND fromRemove = 0)";
+            }
+
+            if($start > -1 && $length > -1) {
+                $limitClause = "LIMIT $start, $length";
+            } else $limitClause = "LIMIT 500";
+
+            if(is_array($idList) && sizeof($idList) > 0) {
+                $inClause .= 'AND id IN (';
+
+                foreach($idList as $id) {
+                    $id = (int)$id;
+
+                    $inClause .= "'$id',";
+                }
+
+                $inClause = rtrim($inClause, ",") . ")";
+            } elseif(is_array($idList) && sizeof($idList) == 0) {
+                $inClause = 'AND id IN(0)';
+            }
+
+            if(is_array($orderList) && sizeof($orderList) > 0) {
+                $orderClause = 'ORDER BY ';
+
+                foreach($orderList as $order) {
+                    if(is_array($order) && $order['col'] != "NULL") {
+                        $orderClause .= "{$order['col']} {$order['dir']},";
+                    }
+                }
+
+                $orderClause = rtrim($orderClause, ",");
+            }
+
+            $totalCount = 0;
+
+            if(!is_null($whereClause)) {
+                Log::logToFile("queryLog", "SELECT COUNT(id) FROM MessagesView WHERE $whereClause $inClause");
+                $rows = $db->queryMultipleRows("SELECT $getCols FROM MessagesView WHERE $whereClause $inClause $orderClause $limitClause");
+                $rowCount = $db->querySingleValue("SELECT COUNT(id) FROM MessagesView WHERE $whereClause $inClause");
+                $totalCount = $db->querySingleValue("SELECT COUNT(id) FROM MessagesView WHERE $whereClause");
+            }
+
+            if(is_array($rows)) {
+                return [
+                    'data' => $rows,
+                    'dataCount' => $totalCount,
+                    'filterCount' => $rowCount
+                ];
+            }
+        }
+
+        return null;
+    }
+
+    public static function view_getById($message) {
+        $db = Database::getInstance();
+        $whereClause = null;
+        $row = null;
+
+        if(is_numeric($message)) {
+            $whereClause = "id = '$message'";
+        } elseif(is_array($message) && isset($message['id'])) {
+            $whereClause = "id = '{$message['id']}'";
+        }
+
+        if(!is_null($whereClause)) {
+            $row = $db->querySingleRow("SELECT * FROM MessagesView WHERE $whereClause LIMIT 1");
+        }
+
+        if(is_array($row)) {
+            return $row;
+        }
+
+        return null;
+    }
+
+    public static function getUnreadCount($user) {
+        $db = Database::getInstance();
+        $whereClause = null;
+
+        if(is_string($user)) {
+            $userData = Users::getUser($user);
+
+            if(is_array($userData)) {
+                $user = $userData['id'];
+            }
+        } elseif(is_array($user) && isset($user['id']) && is_numeric($user['id'])) {
+            $user = $user['id'];
+        }
+
+        if(is_numeric($user)) {
+            $user = (int)$user;
+
+            $numMsgs = $db->querySingleValue("SELECT COUNT(m.id) FROM Messages m WHERE m.toUserID = '$user' AND m.readAt IS NULL
+                                                AND m.toDeleted = '0' AND m.toRemove = '0'");
+
+            return (int)$numMsgs;
+        }
+
+        return false;
+    }
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Manipulation Functions
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    public static function emptyTrash($user) {
+        $db = Database::getInstance();
+
+        if(is_string($user)) {
+            $userData = Users::getUser($user);
+
+            if(is_array($userData)) {
+                $user = $userData['id'];
+            }
+        } elseif(is_array($user) && isset($user['id']) && is_numeric($user['id'])) {
+            $user = $user['id'];
+        }
+
+        if(is_numeric($user)) {
+            $user = (int)$user;
+
+            $db->multi_query("UPDATE Messages m SET m.toRemove = '1' WHERE m.toUserID = '$user' AND m.toDeleted = '1';
+                              UPDATE Messages m SET m.fromRemove = '1' WHERE m.fromUserID = '$user' AND m.fromDeleted = '1'");
+
+            return ($db->affected_rows > 0);
+        }
+
+        return false;
+    }
+}

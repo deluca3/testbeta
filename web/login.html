@@ -1,0 +1,156 @@
+
+//Figure out what state we're in, accept logout requests, etc.
+
+include("/tou/includes/authValidate.php");
+
+use TradeOnUp\API\Authenticate;
+
+if(@isset($_loginRedirect) && @$_loginRedirect) {
+    header("Location: /");
+}
+
+if(isset($_GET['logout']) && (int)$_GET['logout'] == 1) {
+    if(@$_SESSION['auth'] === true) {
+        $auth = new Authenticate();
+
+        //Perform clean logout
+        $auth->__cleanLogout();
+    }
+} elseif(@$_SESSION['auth'] === true) {
+    header("Location: /");
+}
+
+
+
+<!DOCTYPE html>
+<html lang="en" class="loginBG">
+<head>
+    <meta charset="utf-8">
+    <title>Login &middot; Trade On Up</title>
+    <meta name="description" content="Trade up until you get what you want">
+    <meta name="author" content="Trade On Up">
+
+    <!-- Le styles -->
+    <link href='http://fonts.googleapis.com/css?family=Open+Sans:400,300,600,700,800' rel='stylesheet' type='text/css'>
+    <link href="/css/bootstrap.css" type="text/css" rel="stylesheet">
+    <link href="/css/bootstrap-fixed.css" type="text/css" rel="stylesheet">
+
+    <link href="/css/typeahead.js-bootstrap.css" type="text/css" rel="stylesheet">
+
+    <link href="/css/tradeonup.css" type="text/css" rel="stylesheet">
+
+    <!-- IE support -->
+    <!--[if lt IE 9]>
+    <script src="/js/html5shiv.js" type="text/javascript"></script>
+    <script src="/js/respond.src.js" type="text/javascript"></script>
+    <script src="/js/core/ieFix.js" type="text/javascript"></script>
+
+    <link href="/css/tradeonup-ie.css" type="text/css" rel="stylesheet">
+    <![endif]-->
+
+    <!--[if gte IE 9]>
+    <style type="text/css">
+        .gradient {
+            filter: none !important;
+        }
+    </style>
+    <![endif]-->
+
+    <!-- Fav icon -->
+    <link rel="shortcut icon" href="/img/favicon.ico">
+</head>
+
+<body class="loginBG">
+
+<div class="navbar navbar-default navbar-fixed-top touNav gradient noLinkOutline">
+    <div class="container">
+        <div class="navbar-header">
+            <a class="navbar-brand" style="height: 43px;" href="/">
+                <img src="/img/logo_arrow.png" class="navLogo">
+            </a>
+        </div>
+        <div class="navbar-collapse collapse">
+            <ul class="nav navbar-nav navbar-right" style="margin-right: -30px;">
+                <li><a id="btnNavSignUp" href="#">Sign Up</a></li>
+                <li><a id="btnNavLogin" href="#">Login</a></li>
+            </ul>
+
+            <div class="input-group input-group-sm touSearch">
+                <input type="text" id="txtSiteSearch" placeholder="Search merchandise and people" class="form-control siteSearch input-sm">
+
+                <span id="btnSiteSearch" class="input-group-addon">
+                    <label style="margin:0; cursor: pointer;" for="txtSiteSearch">
+                        <i class="icon-search"></i>
+                    </label>
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container">
+
+    <div id="loginForm" class="form-signin"  if(isset($_GET['reg'])): style="height: 440px; margin-top: -220px;" endif; >
+        <div style="text-align: center;">
+            <img src="/img/logo.png" class="img-responsive"/>
+        </div>
+        <br/>
+        <div id="viewLogin"  if(isset($_GET['reg'])): style="display:none;" endif; >
+            <input id="txtComboLogin" type="text" class="form-control" placeholder="Username / Email">
+            <input id="txtPassword" type="password" class="form-control" placeholder="Password">
+            <label class="checkbox">
+                <input type="checkbox" id="chkRememberLogin" value="remember-me"> Remember me
+            </label>
+            <button class="btn btn-primary" id="btnLogin" type="button">Sign in</button>
+            <button class="btn btn-info" id="btnForgotLogin" type="button">I forgot</button>
+            <button class="btn btn-success" id="btnNewUser" type="button">I'm new</button>
+        </div>
+        <div id="viewRegister"  if(!isset($_GET['reg'])): style="display:none;" endif; >
+            <input id="txtRegUsername" type="text" class="form-control" placeholder="Username">
+            <input id="txtRegEmail" type="text" class="form-control" placeholder="E-mail">
+            <input id="txtRegPassword" type="password" class="form-control" placeholder="Password">
+            <input id="txtRegConfirmPassword" type="password" class="form-control" placeholder="Confirm Password">
+            <input id="txtRegInviteCode" type="text" class="form-control" placeholder="Invite Code">
+            <button class="btn btn-success" style="width: 100%;" id="btnRegister" type="button">Create Account</button>
+            <button class="btn btn-default" style="width: 100%; margin-top: 5px;" id="btnCancelRegister" type="button">Cancel</button>
+        </div>
+    </div>
+
+</div>
+
+<div id="loginFooter">
+    <span style="font-size: 11px;">
+        Copyright &copy;  echo date("Y");  Trade On Up LLC
+    </span>
+</div>
+
+<!-- Le javascript
+================================================== -->
+<!-- Placed at the end of the document so the pages load faster -->
+
+<script src="/js/jquery-1.11.0.js" type="text/javascript"></script>
+<script src="/js/bootstrap.js" type="text/javascript"></script>
+<script src="/js/bootbox.js" type="text/javascript"></script>
+<script src="/js/jquery.sha1.js" type="text/javascript"></script>
+<script src="/js/jquery.placeholder.js" type="text/javascript"></script>
+<script src="/js/hogan.js" type="text/javascript"></script>
+<script src="/js/typeahead.js" type="text/javascript"></script>
+<script src="/js/core/apiAccess.js" type="text/javascript"></script>
+<script src="/js/page-includes/autoSearch.js" type="text/javascript"></script>
+<script src="/js/page-includes/root/login.js" type="text/javascript"></script>
+
+<!--<script src="/js/login-combined.js" type="text/javascript"></script>-->
+
+<script>
+    (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+        (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+        m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+    })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+    ga('create', 'UA-49336303-1', 'tradeonup.com');
+    ga('send', 'pageview');
+
+</script>
+
+</body>
+</html>

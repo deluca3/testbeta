@@ -1,0 +1,11 @@
+
+
+//Pull from git
+echo "Updating from repository...<br/><hr/>";
+
+exec("git pull", $result);
+
+foreach($result as $line)
+    echo $line;
+
+echo "<hr/>Complete.";

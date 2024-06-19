@@ -1,0 +1,225 @@
+/*
+session_start();
+header('Content-type: application/javascript');
+*/
+
+/******************************************************************************
+ * Error Handlers
+ ******************************************************************************/
+
+function _apiErrorHandler(errorCode) {
+    switch(errorCode) {
+        case 401:
+            //The API is telling us our session is invalid, so let's go to the login page.
+            window.location = "/login";
+            break;
+    }
+}
+
+/******************************************************************************
+ * Global Definitions (Should start with $ to avoid conflict)
+ ******************************************************************************/
+
+var $mediaSize = String(window.getComputedStyle(document.body,':after').getPropertyValue('content'));
+
+var _fixedNavHeight = 42;
+var _notifOpen = false;
+
+//User Session - Keeps track of PHP session data client-side.
+var $userSession = {
+    "username": "",
+    "csrfToken": ""
+};
+
+/******************************************************************************
+ * Common Functions
+ ******************************************************************************/
+
+function confirmDialog(message, title, callback) {
+    if(window.bootbox != undefined) {
+        bootbox.dialog({
+            "message": message,
+            "title": title,
+            "backdrop": false,
+            "buttons": {
+                "no": {
+                    "label": "No",
+                    "className": "btn-danger",
+                    "callback": function() {
+                        if(typeof(callback) == "function") callback(false);
+                    }
+                },
+                "yes": {
+                    "label": "Yes",
+                    "className": "btn-success",
+                    "callback": function() {
+                        if(typeof(callback) == "function") callback(true);
+                    }
+                }
+            }
+        });
+    } else console.log("ERROR: Bootbox not included.");
+}
+
+function phpUrlDecode(str) {
+    return decodeURIComponent((str+'').replace(/\+/g, '%20'));
+}
+
+function getImageDimensions(path,callback){
+    var img = new Image();
+    img.onload = function(){
+        callback({
+            width : img.width,
+            height : img.height
+        });
+    };
+    img.src = path;
+}
+
+function getQueryParameterByName(name) {
+    name = name.replace(/[\[]/, "\\\[").replace(/[\]]/, "\\\]");
+    var regex = new RegExp("[\\?&]" + name + "=([^&#]*)"),
+        results = regex.exec(location.search);
+    return results == null ? "" : decodeURIComponent(results[1].replace(/\+/g, " "));
+}
+
+function cloneCanvas(oldCanvas) {
+    //create a new canvas
+    var newCanvas = document.createElement('canvas');
+    var context = newCanvas.getContext('2d');
+
+    //set dimensions
+    newCanvas.width = oldCanvas.width;
+    newCanvas.height = oldCanvas.height;
+
+    //apply the old canvas to the new one
+    context.drawImage(oldCanvas, 0, 0);
+
+    //return the new canvas
+    return newCanvas;
+}
+
+function scrollToElement(element) {
+    $('html,body').animate({scrollTop: parseFloat($(element).offset().top) - _fixedNavHeight});
+}
+
+function isMobile() {
+    //TODO: This is not a great way to do it..
+    return (/iPhone|iPod|iPad|Android|BlackBerry/).test(navigator.userAgent)
+}
+
+function timeFrom(timestamp) { //Requires moment.js
+    var currentTime = new Date();
+    var timestampDate = new Date(timestamp * 1000);
+
+    if(currentTime.getFullYear() > timestampDate.getFullYear()) { //Different year
+        return moment.unix(timestamp).format("MMMM Do, YYYY [at] h:mm a");
+    } else if((currentTime.getTime() / 1000) - timestamp >= 75600) { //Past a day (21 hrs technically - based on moment.js checks)
+        return moment.unix(timestamp).format("MMMM Do [at] h:mm a");
+    } else { //Within the same day
+        return moment.unix(timestamp).fromNow();
+    }
+}
+
+Array.prototype.chunk = function(chunkSize) {
+    var array=this;
+    return [].concat.apply([],
+        array.map(function(elem,i) {
+            return i%chunkSize ? [] : [array.slice(i,i+chunkSize)];
+        })
+    );
+}
+
+Object.size = function(obj) {
+    var size = 0, key;
+    for (key in obj) {
+        if (obj.hasOwnProperty(key)) size++;
+    }
+    return size;
+};
+
+/******************************************************************************
+ * General Setup
+ ******************************************************************************/
+
+function _loadNotifications() {
+
+    $("#btnNavNotifications").popover({
+        "placement": "bottom",
+        "title": '<i class="icon-bolt" style="">&nbsp;</i>Notifications',
+        "html": true,
+        "content": $("#navNotifications").html(),
+        "template": '<div class="popover"><div class="arrow"></div><h3 class="popover-title"></h3><div class="popover-content notifContent"></div></div>'
+    });
+
+    $("#btnNavNotifications").on("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        $("#notifContainer").html('<div style="text-align: center;"><b>Loading Notifications...</b><br/><img src="/img/ajax-loader.gif"/></div>');
+
+        var callbacks = {
+            "success": function(data) {
+                if(data) {
+                    var dustCtx = dust.makeBase({
+                        "timeFrom": function(chunk, context, bodies, params) {
+                            var output = timeFrom(parseInt(params['timestamp']));
+                            return chunk.write(output);
+                        }
+                    });
+
+                    dust.render("notification", dustCtx.push(data), function(err, out) {
+                        $("#notifContainer").html(out);
+
+                        //Clear notification count as API call marks them all as seen.
+                        $("#nav_notifBadge").text("").css("display", "none");
+                    });
+                }
+            },
+            "noNotif": function() {
+                $("#notifContainer").html('<div style="text-align: center;"><b>No notifications.</b></div>');
+            }
+        };
+
+        $API.getNotifications(callbacks);
+    });
+
+    $(document).on("click", function (e) {
+        if(($('.popover').has(e.target).length == 0) || $(e.target).is('.close')) {
+            $('#btnNavNotifications').popover('hide');
+        }
+    });
+}
+
+$(document).ready(function() {
+    if(isMobile()) {
+        $(".touNav").removeClass("navbar-fixed-top").css("margin-bottom", "0");
+        $(".container, .homeContainer").removeClass("fixedHeaderPadding");
+        _fixedNavHeight = 0;
+    }
+
+    if(typeof($(document).placeholder) == "function") {
+        $('input, textarea').placeholder();
+    }
+
+    _loadNotifications();
+});
+
+//Adds extra parameters to all executed AJAX requests.
+//This is where we attach the CSRF token header.
+$.ajaxSetup({
+    error: function(XHR) {
+        _apiErrorHandler(XHR.status);
+    },
+    beforeSend: function(XHR) {
+        if($userSession.csrfToken.length > 0) {
+            XHR.setRequestHeader("X-CSRF-Token", $userSession.csrfToken);
+        }
+    }
+});
+
+// if(isset($_SESSION['auth']) && $_SESSION['auth']): 
+//Session data
+$userSession.username = ' echo $_SESSION["username"]; ';
+$userSession.csrfToken = ' echo $_SESSION["csrfToken"]; ';
+// endif; 

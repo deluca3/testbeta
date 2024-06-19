@@ -1,0 +1,27 @@
+
+
+namespace JBBCode\validators;
+
+use JBBCode\InputValidator;
+
+/**
+ * An InputValidator for emails. This can be used to make [email] bbcodes secure.
+ *
+ * @author ggage
+ * @since Nov 2013
+ */
+class EmailValidator implements InputValidator
+{
+
+    /**
+     * Returns true iff $input is a valid email.
+     *
+     * @param $input  the string to validate
+     */
+    public function validate($input)
+    {
+        $valid = filter_var($input, FILTER_VALIDATE_EMAIL);
+        return !!$valid;
+    }
+
+}

@@ -1,0 +1,142 @@
+
+//$_doRedirect = true; //Will redirect to login page if non-authenticated user attempts to get here.
+include("/tou/includes/authValidate.php"); 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Search &middot; Trade On Up</title>
+    <meta name="description" content="Trade up until you get what you want">
+    <meta name="author" content="Trade On Up">
+
+    <!-- Le styles -->
+    <link href='http://fonts.googleapis.com/css?family=Open+Sans:400,300,600,700,800' rel='stylesheet' type='text/css'>
+    <link href="/css/bootstrap.css" type="text/css" rel="stylesheet">
+    <link href="/css/bootstrap-fixed.css" type="text/css" rel="stylesheet">
+
+    <link rel="stylesheet" href="/css/font-awesome.css">
+
+    <!--[if IE 7]>
+    <link rel="stylesheet" href="/css/font-awesome-ie7.css">
+    <![endif]-->
+
+    <link href="/css/typeahead.js-bootstrap.css" type="text/css" rel="stylesheet">
+    <link href="/css/bootstrap-modal-bs3patch.css" type="text/css" rel="stylesheet">
+    <link href="/css/bootstrap-modal.css" type="text/css" rel="stylesheet">
+
+    <link href="/css/tradeonup.css" type="text/css" rel="stylesheet">
+
+    <link href="/css/magnific-popup.css" type="text/css" rel="stylesheet">
+
+    <!-- IE support -->
+    <!--[if lt IE 9]>
+    <script src="/js/html5shiv.js" type="text/javascript"></script>
+    <script src="/js/respond.src.js" type="text/javascript"></script>
+    <script src="/js/core/ieFix.js" type="text/javascript"></script>
+
+    <link href="/css/tradeonup-ie.css" type="text/css" rel="stylesheet">
+    <![endif]-->
+
+    <!--[if gte IE 9]>
+    <style type="text/css">
+        .gradient {
+            filter: none !important;
+        }
+    </style>
+    <![endif]-->
+
+    <script language="JavaScript">
+        var _searchFor = ' echo trim($_GET['for']); ';
+    </script>
+
+    <!-- Fav icon -->
+    <link rel="shortcut icon" href="/img/favicon.ico">
+</head>
+
+<body>
+
+ include("/tou/includes/view/topNav.php"); 
+
+<div class="container fixedHeaderPadding">
+    <div class="row" id="pageContainer">
+        <div class="col-xs-3 flatCol">
+            <h4 style="margin: 0;">Categories</h4>
+            <hr style="margin:0" class="niceLine">
+            <br>
+            <ul style="list-style: none; padding-left: 0;">
+                <li><a href="#">Category</a><span style="color: #777;" class="pull-right">(24)</span></li>
+            </ul>
+            <ul>
+                <li><a href="#">Sub-Category</a><span style="color: #777;" class="pull-right">(12)</span></li>
+                <li><a href="#">Sub-Category</a><span style="color: #777;" class="pull-right">(12)</span></li>
+            </ul>
+            <h4 style="margin: 0;">Condition</h4>
+            <hr style="margin:0" class="niceLine">
+            <br>
+            <input type="radio" name="itemCondition" id="conditionNew">&nbsp;<label for="conditionNew">New</label>
+            <br>
+            <input type="radio" name="itemCondition" id="conditionUsed">&nbsp;<label for="conditionUsed">Used</label>
+            <br><br>
+            <h4 style="margin: 0;">Type</h4>
+            <hr class="niceLine" style="margin:0">
+            <br>
+            <input type="checkbox" id="typeTrade">&nbsp;<label for="typeTrade">Trades</label>
+            <br>
+            <input type="checkbox" id="typeCashOffer">&nbsp;<label for="typeCashOffer">Cash Offer</label>
+            <br>
+            <input type="checkbox" id="typeBuyNow">&nbsp;<label for="typeBuyNow">Buy Now</label>
+        </div>
+        <div id="mainContent" class="col-xs-9">
+            <h3 style="margin: 0;">&quot;<span id="searchTerms"> echo(trim($_GET['for'])); </span>&quot;</h3>
+            <div>Related Searches: <a href="#" style="text-decoration: underline;">item</a>&nbsp;<a style="text-decoration: underline;" href="#">other item</a>&nbsp;<a style="text-decoration: underline;" href="#">another item</a></div>
+            <br>
+            <div class="panel panel-default">
+                <div class="panel-heading">
+                    &nbsp;
+                    <div class="input-group input-group-sm panelInput">
+                        <span class="input-group-addon">
+                            <label style="margin:0;" for="txtItemSearch">
+                                <i class="icon-search"></i>
+                            </label>
+                        </span>
+
+                        <input type="text" disabled="disabled" id="txtResultSearch" title="Coming soon." placeholder="Search Results" class="form-control">
+                    </div>
+                    <div id="viewButtons" style="margin-top: -27px;" class="pull-right">
+                        &nbsp;&nbsp;VIEW:
+                        <button id="btnViewIcons" class="btn btn-default"><i class="icon-th-large"></i></button>
+                        <button id="btnViewList" class="btn btn-default active"><i class="icon-th-list"></i></button>
+                    </div>
+                    <div style="margin-top: -23px;" class="pull-right">
+                        SORT BY:
+                        <select disabled="disabled" title="Coming soon.">
+                            <option>Relevance</option>
+                            <option>Highest Rating</option>
+                            <option>Most Views</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="searchResults" class="panel-body">
+                    <div style="text-align: center"><img src="/img/ajax-loader.gif"/></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+ include("/tou/includes/view/footer.php"); 
+
+<!-- Le javascript
+================================================== -->
+<!-- Placed at the end of the document so the pages load faster -->
+
+ include("/tou/includes/view/globalInc.php"); 
+
+<script src="/js/templates/misc/stars.js" type="text/javascript"></script>
+
+<script src="/js/templates/search_searchRow.js" type="text/javascript"></script>
+
+<script src="/js/page-includes/root/search.js" type="text/javascript"></script>
+
+</body>
+</html>

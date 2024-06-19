@@ -1,0 +1,194 @@
+
+/**
+ * Copyright 2013 Trade On Up LLC.
+ * Originally written by Gage on 9/18/13
+ */
+
+namespace TradeOnUp\Core;
+
+use \Imagick;
+use TradeOnUp\Core\Log;
+
+class ImageUtilities {
+    public static function thumbnailImage($filePath, $outputPath) {
+        //Thumbnail size settings
+        $width = 100;
+        $height = 100;
+
+        //Load image
+        $image = new Imagick($filePath);
+
+        //Grab image geometry
+        $geo = $image->getImageGeometry();
+
+        //Crop the image
+        if(($geo['width']/$width) < ($geo['height']/$height)) {
+            $image->cropImage($geo['width'], floor($height*$geo['width']/$width), 0, (($geo['height']-($height*$geo['width']/$width))/2));
+        }
+        else {
+            $image->cropImage(ceil($width*$geo['height']/$height), $geo['height'], (($geo['width']-($width*$geo['height']/$height))/2), 0);
+        }
+
+        //Generate thumbnail
+        $image->ThumbnailImage($width, $height, true);
+
+        //Set format and quality
+        $image->setImageFormat('jpg');
+        $image->setCompressionQuality(75);
+
+        //Interlaced
+        $image->setInterlaceScheme(Imagick::INTERLACE_PLANE);
+
+        //Write it out
+        $image->writeImage($outputPath);
+
+        //Cleanup
+        $image->destroy();
+
+        return true;
+    }
+
+    public static function cropImage($filePath, $outputPath, $width, $height, $x, $y) {
+        //Load image
+        $image = new Imagick($filePath);
+
+        //Crop the image
+        $image->cropImage($width, $height, $x, $y);
+
+        //Scale the image
+        $image->scaleimage(350, 350);
+
+        //Set format and quality
+        $image->setImageFormat('jpg');
+        $image->setCompressionQuality(75);
+
+        //Interlaced
+        $image->setInterlaceScheme(Imagick::INTERLACE_PLANE);
+
+        //Write it out
+        $image->writeImage($outputPath);
+
+        //Cleanup
+        $image->destroy();
+
+        return true;
+    }
+
+    public static function cropImageAuto($filePath, $outputPath) {
+        //Load image
+        $image = new Imagick($filePath);
+
+        //Grab image geometry
+        $geo = $image->getImageGeometry();
+
+        //Crop the image (1:1 ratio)
+        if($geo['width'] == $geo['height']) { //Ratio is already 1:1, just copy.
+            return copy($filePath, $outputPath);
+        } else { //Ratio is not 1:1, we need to crop it.
+            if($geo['width'] < $geo['height']) { //Crop to width
+                $image->cropImage($geo['width'], $geo['width'], 0, ($geo['height'] - $geo['width']) / 2);
+            }
+            else { //Crop to height
+                $image->cropImage($geo['height'], $geo['height'], ($geo['width'] - $geo['height']) / 2, 0);
+            }
+        }
+
+        //Scale the image
+        $image->scaleimage(350, 350);
+
+        //Set format and quality
+        $image->setImageFormat('jpg');
+        $image->setCompressionQuality(75);
+
+        //Interlaced
+        $image->setInterlaceScheme(Imagick::INTERLACE_PLANE);
+
+        //Write it out
+        $image->writeImage($outputPath);
+
+        //Cleanup
+        $image->destroy();
+
+        return true;
+    }
+
+    public static function getScaledCoordinates($filePath, $x, $y, $w, $h, $scaleWidth = 350) {
+        //Load image
+        $image = new Imagick($filePath);
+
+        //Grab image geometry
+        $geo = $image->getImageGeometry();
+
+        //Scale it down
+        $image->scaleimage((int)$scaleWidth, 0);
+
+        //Grab scaled image geometry
+        $scaleGeo = $image->getImageGeometry();
+
+        //Cleanup
+        $image->destroy();
+
+        $xScale = $geo['width'] / $scaleGeo['width'];
+        $yScale = $geo['height'] / $scaleGeo['height'];
+
+        $x *= $xScale;
+        $y *= $yScale;
+        $w *= $xScale;
+        $h *= $yScale;
+
+        return [
+            "x" => $x,
+            "y" => $y,
+            "w" => $w,
+            "h" => $h
+        ];
+    }
+
+    public static function prepImage($filePath, $outputPath) {
+        //Load image
+        $image = new Imagick($filePath);
+
+        //Generate new white image @ same dimensions as input.
+        $outputJPG = new Imagick();
+        $outputJPG->newImage($image->getImageWidth(), $image->getImageHeight(), "white");
+
+        //Composite image over white background
+        $outputJPG->compositeImage($image, Imagick::COMPOSITE_OVER, 0, 0);
+
+        //Set format and quality
+        $outputJPG->setImageFormat('jpg');
+        $outputJPG->setCompressionQuality(75);
+        $outputJPG->setImageResolution(72,72);
+        $outputJPG->resampleImage(72,72,imagick::FILTER_UNDEFINED,0);
+
+        //Interlaced
+        $outputJPG->setInterlaceScheme(Imagick::INTERLACE_PLANE);
+
+        $outputJPG->writeImage($outputPath);
+
+        //Cleanup
+        $image->destroy();
+        $outputJPG->destroy();
+
+        return true;
+    }
+
+    public static function getResizedImage($filePath, $width = 0, $height = 0) {
+        if((int)$width > 0 || (int)$height > 0) {
+            $image = new Imagick($filePath);
+
+            if(is_null($width)) $width = 0;
+            if(is_null($height)) $height = 0;
+
+            //Scale it
+            $image->scaleimage((int)$width, (int)$height);
+
+            //Interlaced
+            $image->setInterlaceScheme(Imagick::INTERLACE_PLANE);
+
+            return $image;
+        }
+
+        return null;
+    }
+}

@@ -1,0 +1,80 @@
+
+/**
+ * Copyright 2014 Trade On Up LLC.
+ * Originally written by Gage on 3/14/14
+ */
+
+namespace TradeOnUp\Models;
+
+use TradeOnUp\Core\Database;
+
+class Wishlists extends Model {
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Lookup Functions
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    public static function getWishlistForUser($user) {
+        $db = Database::getInstance();
+        $whereClause = null;
+        $rows = null;
+
+        if(is_numeric($user)) {
+            $whereClause = "w.userID = '$user'";
+        } elseif(is_string($user)) {
+            $userData = Users::getUser($user);
+
+            if(is_array($userData)) {
+                $whereClause = "w.userID = '{$userData['id']}'";
+            }
+        } elseif(is_array($user) && isset($user['id']) && is_numeric($user['id'])) {
+            $user['id'] = (int)$user['id'];
+
+            if($user['id'] > 0) {
+                $whereClause = "w.userID = '{$user['id']}'";
+            }
+        }
+
+        if(!is_null($whereClause)) {
+            $rows = $db->queryMultipleRows("SELECT w.* FROM `Wishlists` w WHERE $whereClause");
+        }
+
+        if(is_array($rows)) {
+            return $rows;
+        }
+
+        return null;
+    }
+
+    public static function getRandomWishes($user, $limit) {
+        $db = Database::getInstance();
+        $whereClause = null;
+        $rows = null;
+        $limit = (int)$limit;
+
+        if(is_numeric($user)) {
+            $whereClause = "w.userID = '$user'";
+        } elseif(is_string($user)) {
+            $userData = Users::getUser($user);
+
+            if(is_array($userData)) {
+                $whereClause = "w.userID = '{$userData['id']}'";
+            }
+        } elseif(is_array($user) && isset($user['id']) && is_numeric($user['id'])) {
+            $user['id'] = (int)$user['id'];
+
+            if($user['id'] > 0) {
+                $whereClause = "w.userID = '{$user['id']}'";
+            }
+        }
+
+        if(!is_null($whereClause)) {
+            $rows = $db->queryMultipleRows("SELECT w.* FROM `Wishlists` w WHERE $whereClause ORDER BY RAND() LIMIT $limit");
+        }
+
+        if(is_array($rows)) {
+            return $rows;
+        }
+
+        return null;
+    }
+} 

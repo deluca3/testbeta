@@ -1,0 +1,203 @@
+
+/**
+ * Copyright 2013 Trade On Up LLC.
+ * Originally written by Gage on 9/30/13
+ */
+
+namespace TradeOnUp\API;
+
+use Luracast\Restler\RestException;
+
+use TradeOnUp\Core\Database;
+use TradeOnUp\Models\Users;
+use TradeOnUp\Models\Items;
+use TradeOnUp\Models\ItemImages;
+use TradeOnUp\Core\ImageUtilities;
+use TradeOnUp\Core\Core;
+use TradeOnUp\Core\HashID;
+use TradeOnUp\Core\Validate;
+use TradeOnUp\Core\Log;
+
+class Image {
+    public function __setItemThumbAs($itemID, $imageID) {
+        return $this->putThumb([
+            "id" => (int)$itemID,
+            "imageID" => (int)$imageID
+        ]);
+    }
+
+    protected function getSizedItemThumb($id, $width = 350) {
+        //TODO: This probably is not the best way to handle this.. Images should likely be pre-resized on upload so this isn't being done constantly?
+        $hashIDs = HashID::getInstance();
+        $id = $hashIDs->decrypt($id);
+
+        if($item = Validate::itemOwner($id, $_SESSION['userID'])) {
+            $thumbImage = ItemImages::getById($item['thumbImageID']);
+
+            if(is_array($thumbImage)) {
+                $originalImage = str_replace("t_", "", $thumbImage['url']);
+                $originalImage = str_replace("/cdn/", "/tou/devCDN/", $originalImage);
+                $originalImage = explode("?", $originalImage)[0];
+
+                $smallImage = ImageUtilities::getResizedImage($originalImage, (int)$width);
+
+                header('Content-Type: image/'.$smallImage->getImageFormat());
+                echo $smallImage;
+            }
+        } else throw new RestException(403, "Ownership invalid");
+    }
+
+    protected function getSizedAvatarThumb($width = 350) {
+        //TODO: This probably is not the best way to handle this.. Images should likely be pre-resized on upload so this isn't being done constantly?
+        $hashIDs = HashID::getInstance();
+
+        $originalImage = "/tou/devCDN/avatar_" . $hashIDs->encrypt($_SESSION['userID']) . "/avatar.jpg";
+
+        if(file_exists($originalImage)) {
+            $smallImage = ImageUtilities::getResizedImage($originalImage, (int)$width);
+
+            header('Content-Type: image/'.$smallImage->getImageFormat());
+            echo $smallImage;
+        }
+    }
+
+    protected function getSizedImage($id, $width = 350) {
+        //TODO: This probably is not the best way to handle this.. Images should likely be pre-resized on upload so this isn't being done constantly?
+        $hashIDs = HashID::getInstance();
+        $id = $hashIDs->decrypt($id);
+
+        $itemImage = ItemImages::getById($id);
+
+        if(is_array($itemImage)) {
+            $originalImage = str_replace("/cdn/", "/tou/devCDN/", $itemImage['url']);
+            $originalImage = explode("?", $originalImage)[0];
+
+            $smallImage = ImageUtilities::getResizedImage($originalImage, (int)$width);
+
+            header('Content-Type: image/'.$smallImage->getImageFormat());
+            echo $smallImage;
+        } else throw new RestException(404, "No such image");
+    }
+
+    protected function putAvatarThumb($request_data = null) {
+        $hashIDs = HashID::getInstance();
+
+        //Force aspect ratio
+        if(isset($request_data['w'])) $request_data['h'] = $request_data['w'];
+
+        $originalImage = "/tou/devCDN/avatar_" . $hashIDs->encrypt($_SESSION['userID']) . "/avatar.jpg";
+        $thumbImage = "/tou/devCDN/avatar_" . $hashIDs->encrypt($_SESSION['userID']) . "/t_avatar.jpg";
+
+        if(file_exists($originalImage)) {
+            //Generate new thumb
+            if(isset($request_data['w']) && isset($request_data['h']) &&
+                isset($request_data['x']) && isset($request_data['y'])) {
+
+                $coords = ImageUtilities::getScaledCoordinates($originalImage,
+                    (int)$request_data['x'], (int)$request_data['y'],
+                    (int)$request_data['w'], (int)$request_data['h']);
+
+                ImageUtilities::cropImage($originalImage, $thumbImage,
+                    $coords['w'], $coords['h'],
+                    $coords['x'], $coords['y']);
+            } else ImageUtilities::cropImageAuto($originalImage, $thumbImage);
+
+            return true;
+        } else throw new RestException(404, "No avatar image has been uploaded.");
+    }
+
+    protected function putThumb($request_data = null) {
+        //TODO: Modify to take a specified imageID rather than just working on currently set thumbnail image
+        //TODO: Use a db transaction (need to take into account file system modifications)
+
+        if(isset($request_data['id'])) {
+            $hashIDs = HashID::getInstance();
+            $request_data['id'] = $hashIDs->decrypt($request_data['id']);
+
+            //Force aspect ratio
+            if(isset($request_data['w'])) $request_data['h'] = $request_data['w'];
+
+            if($item = Validate::itemOwner((int)$request_data['id'], $_SESSION['userID'])) {
+                //Get current thumb data
+                $currentThumb = !is_null($item['thumbImageID']) ? ItemImages::getById($item['thumbImageID']) : null;
+
+                if(isset($request_data['imageID'])) {
+                    //We got a imageID, so we're setting that as the new thumb.
+                    $imageID = $hashIDs->decrypt($request_data['imageID']);
+
+                    //Validate ownership of the specified imageID
+                    if(($itemImage = Validate::itemImageOwner($imageID, $_SESSION['userID'])) && $itemImage['userID'] == $_SESSION['userID']) {
+                        if(is_null($itemImage['isThumb'])) {
+                            $originalImage = str_replace("/cdn/", "/tou/devCDN/", $itemImage['url']);
+
+                            $thumbPathInfo = pathinfo($originalImage);
+                            $thumbPath = $thumbPathInfo['dirname'] . "/t_" . $thumbPathInfo['basename'];
+                            $thumbURL = str_replace("/tou/devCDN/", "/cdn/", $thumbPath);
+
+                            //Generate new thumb
+                            if(isset($request_data['w']) && isset($request_data['h']) &&
+                                isset($request_data['x']) && isset($request_data['y'])) {
+
+                                $coords = ImageUtilities::getScaledCoordinates($originalImage,
+                                    (int)$request_data['x'], (int)$request_data['y'],
+                                    (int)$request_data['w'], (int)$request_data['h']);
+
+                                ImageUtilities::cropImage($originalImage, $thumbPath,
+                                    $coords['w'], $coords['h'],
+                                    $coords['x'], $coords['y']);
+                            } else ImageUtilities::cropImageAuto($originalImage, $thumbPath);
+
+                            //Database changes
+                            $imageData = [
+                                "id" => $currentThumb['id'], //Will be ditched by ::insert
+                                "userID" => $_SESSION['userID'],
+                                "imageSizeBytes" => filesize($thumbPath),
+                                "uploadedAt" => Core::mysqlTimestamp(),
+                                "isThumb" => $itemImage['id'],
+                                "url" => explode("?", $thumbURL)[0] . "?t=" . time()
+                            ];
+
+                            if(!is_null($currentThumb)) {
+                                //Update necessary DB fields
+                                return ItemImages::update($imageData, "imageSizeBytes, uploadedAt, url, isThumb");
+                            } else {
+                                //Add new thumb
+                                if(ItemImages::insert($imageData)) {
+                                    return true;
+                                } else throw new RestException(500, "Database failure");
+                            }
+                        } else throw new RestException(500, "Invalid image for thumbnail");
+                    } else throw new RestException(403, "Image ownership invalid");
+                } else { //Working with current thumbnail image
+                    if(is_array($currentThumb)) {
+                        $originalImage = str_replace("/cdn/", "/tou/devCDN/", $currentThumb['url']);
+                        $originalImage = explode("?", $originalImage)[0];
+
+                        //Generate new thumb
+                        if(isset($request_data['w']) && isset($request_data['h']) &&
+                            isset($request_data['x']) && isset($request_data['y'])) {
+
+                            $coords = ImageUtilities::getScaledCoordinates(str_replace("t_", "", $originalImage),
+                                (int)$request_data['x'], (int)$request_data['y'],
+                                (int)$request_data['w'], (int)$request_data['h']);
+
+                            ImageUtilities::cropImage(str_replace("t_", "", $originalImage), $originalImage,
+                                $coords['w'], $coords['h'],
+                                $coords['x'], $coords['y']);
+                        } else ImageUtilities::cropImageAuto(str_replace("t_", "", $originalImage), $originalImage);
+
+                        //Update necessary DB fields
+                        $updatedImage = [
+                            "id" => $currentThumb['id'],
+                            "imageSizeBytes" => filesize($originalImage),
+                            "uploadedAt" => Core::mysqlTimestamp(),
+                            "url" => explode("?", $currentThumb['url'])[0] . "?t=" . time()
+                        ];
+
+                        return ItemImages::update($updatedImage, "imageSizeBytes, uploadedAt, url");
+                    } else throw new RestException(500, "Database failure");
+                }
+            } else throw new RestException(403, "Ownership invalid");
+        } else throw new RestException(412, "Missing required parameters");
+    }
+}

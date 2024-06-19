@@ -1,0 +1,63 @@
+
+
+namespace TradeOnUp\Models;
+
+use TradeOnUp\Core\Database;
+
+class Categories extends Model {
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Lookup Functions
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    public static function getChildlessCategories() { //Not sure why I wrote this.. possibly remove.
+        $db = Database::getInstance();
+        $rows = null;
+
+        $rows = $db->queryMultipleRows("SELECT t1.name FROM
+                                        Categories AS t1 LEFT JOIN Categories as t2
+                                        ON t1.id = t2.parentID
+                                        WHERE t2.id IS NULL ORDER BY t1.id");
+
+        if(is_array($rows)) {
+            return $rows;
+        }
+
+        return null;
+    }
+
+    public static function getTopTierCategories() {
+        $db = Database::getInstance();
+        $rows = null;
+
+        $rows = $db->queryMultipleRows("SELECT c.id, c.name,
+                                        (SELECT COUNT(cc.id) FROM Categories cc WHERE cc.parentID = c.id) > 0 as hasChildren
+                                        FROM Categories c
+                                        WHERE c.parentID IS NULL");
+
+        if(is_array($rows)) {
+            return $rows;
+        }
+
+        return null;
+    }
+
+    public static function getCategoriesWithParent($parentID) {
+        $db = Database::getInstance();
+        $rows = null;
+
+        $parentID = (int)$parentID;
+
+        $rows = $db->queryMultipleRows("SELECT c.id, c.name,
+                                        (SELECT COUNT(cc.id) FROM Categories cc WHERE cc.parentID = c.id) > 0 as hasChildren
+                                        FROM Categories c
+                                        WHERE c.parentID = '$parentID'");
+
+        if(is_array($rows)) {
+            return $rows;
+        }
+
+        return null;
+    }
+
+}

@@ -1,0 +1,298 @@
+
+/**
+ * Copyright 2014 Trade On Up LLC.
+ * Originally written by Gage on 06/05/2014
+ */
+
+namespace TradeOnUp\Core;
+
+use Solarium;
+
+/**
+ * Solr Wrapper
+ *
+ * Requires Solarium 3
+ *
+ * Class Solr
+ * @package TradeOnUp\Core
+ */
+class Solr {
+    const MAX_UPDATE_BUFFER_SIZE = 100; //Documents per update batch
+    const MAX_DELETE_BUFFER_SIZE = 1000; //Documents per delete batch
+
+    protected $solrConfig = [
+        'endpoint' => [
+            'localhost' => [
+                'host' => '127.0.0.1',
+                'port' => 8983,
+                'path' => '/solr/tou-item-search',
+            ]
+        ]
+    ];
+
+    protected $solClient = null;
+
+    /**
+     * Constructor
+     *
+     * @param string $host
+     * @param int $port
+     * @param string $path
+     */
+    public function __construct($host = null, $port = null, $path = null) {
+        if($host) $this->solrConfig['endpoint']['localhost']['host'] = $host;
+        if($port) $this->solrConfig['endpoint']['localhost']['port'] = $port;
+        if($path) $this->solrConfig['endpoint']['localhost']['path'] = $path;
+
+        $this->solClient = new Solarium\Client($this->solrConfig);
+    }
+
+    /**
+     * Assembles and uploads documents to Solr for addition to the index.
+     *
+     * @param array      $documentSet
+     * @param bool       $commitNow
+     *
+     * @return bool
+     *
+     * @throws \Exception
+     */
+    public function addDocuments(Array $documentSet, $commitNow = false) {
+        if(sizeof($documentSet) == 0) {
+            throw new \Exception("Must provide at least one document.");
+        }
+
+        $solUpdate = $this->solClient->createUpdate();
+
+        $documents = [];
+
+        if(isset($documentSet['id'])) {
+            $document = $solUpdate->createDocument();
+
+            foreach($documentSet as $key => $value) {
+                if(!is_null($value)) {
+                    $document[$key] = $value;
+                }
+            }
+
+            $this->cleanDocument($document);
+
+            $documents[] = $document;
+        } else {
+            foreach($documentSet as $documentData) {
+                $document = $solUpdate->createDocument();
+
+                foreach($documentData as $key => $value) {
+                    if(!is_null($value)) {
+                        $document[$key] = $value;
+                    }
+                }
+
+                $this->cleanDocument($document);
+
+                $documents[] = $document;
+            }
+        }
+
+        if(sizeof($documents) > 0) {
+            if(sizeof($documents) <= self::MAX_UPDATE_BUFFER_SIZE) {
+                //Single batch
+                $solUpdate->addDocuments($documents);
+
+                if($commitNow) {
+                    $solUpdate->addCommit();
+                }
+
+                if(($status = $this->solClient->update($solUpdate)->getStatus()) == 0) {
+                    return true;
+                } else throw new \Exception("Got bad response from Solr. Code: $status");
+            } else {
+                //Update in batches
+                $chunkedDocs = array_chunk($documents, self::MAX_UPDATE_BUFFER_SIZE);
+
+                foreach($chunkedDocs as $chunk) {
+                    $solUpdate->addDocuments($chunk);
+
+                    if(($status = $this->solClient->update($solUpdate)->getStatus()) == 0) {
+                        $solUpdate = $this->solClient->createUpdate();
+                    } else throw new \Exception("Got bad response from Solr. Code: $status");
+                }
+
+                if($commitNow) {
+                    $this->commitDocuments();
+                }
+
+                return true;
+            }
+        } else throw new \Exception("Failed to create Solarium document set.");
+    }
+
+    /**
+     * Assembles and uploads document IDs to Solr for deletion from the index.
+     *
+     * @param array      $documentSet
+     * @param bool       $commitNow
+     *
+     * @return bool
+     *
+     * @throws \Exception
+     */
+    public function deleteDocuments(Array $documentSet, $commitNow = false) {
+        if(sizeof($documentSet) == 0) {
+            throw new \Exception("Must provide at least one document.");
+        }
+
+        $solUpdate = $this->solClient->createUpdate();
+
+        if(sizeof($documentSet) <= self::MAX_DELETE_BUFFER_SIZE) {
+            //Single batch
+            $solUpdate->addDeleteById($documentSet['id']);
+
+            if($commitNow) {
+                $solUpdate->addCommit();
+            }
+
+            if(($status = $this->solClient->update($solUpdate)->getStatus()) == 0) {
+                return true;
+            } else throw new \Exception("Got bad response from Solr. Code: $status");
+        } else {
+            //Update in batches
+            $chunkedDocs = array_chunk($documentSet, self::MAX_DELETE_BUFFER_SIZE);
+
+            foreach($chunkedDocs as $chunk) {
+                foreach($chunk as $documentData) {
+                    if(isset($documentData['id'])) {
+                        $solUpdate->addDeleteById($documentData['id']);
+                    }
+                }
+
+                if(($status = $this->solClient->update($solUpdate)->getStatus()) == 0) {
+                    $solUpdate = $this->solClient->createUpdate();
+                } else throw new \Exception("Got bad response from Solr. Code: $status");
+            }
+
+            if($commitNow) {
+                $this->commitDocuments();
+            }
+
+            return true;
+        }
+    }
+
+    /**
+     * Commands Solr to commit added documents to the index
+     *
+     * @return \Solarium\QueryType\Update\Result
+     */
+    public function commitDocuments() {
+        $solUpdate = $this->solClient->createUpdate();
+        $solUpdate->addCommit();
+
+        return $this->solClient->update($solUpdate);
+    }
+
+    /**
+     * Perform a basic select query
+     *
+     * @param string    $query
+     * @param bool      $returnClean
+     *
+     * @return object | array
+     */
+    public function basicSearch($query, $returnClean = true) {
+        $return = [];
+
+        $solQuery = $this->solClient->createSelect();
+
+        $solQuery->setQuery($query);
+
+        $resultSet = $this->solClient->select($solQuery);
+
+        if($returnClean) {
+            foreach($resultSet as $document) {
+                $return[] = $document;
+            }
+        }
+
+        return $return;
+    }
+
+    /**
+     * Perform an advanced select query
+     *
+     * @param array     $selectArray
+     *
+     * @return object
+     *
+     * @throws \Exception
+     */
+    public function advancedSearch(Array $selectArray) {
+        if(!isset($selectArray['query'])) {
+            throw new \Exception("Advanced search must at least have a query.");
+        }
+
+        $solQuery = $this->solClient->createSelect($selectArray);
+
+        return $this->solClient->select($solQuery);
+    }
+
+    /**
+     * Perform a suggester query
+     *
+     * @param string    $term
+     * @param int       $count
+     * @param string    $suggester
+     *
+     * @return array
+     */
+    public function suggesterQuery($term, $count = 10, $suggester = "fuzzy_suggester") {
+        $solQuery = $this->solClient->createSuggester();
+
+        $solQuery->setHandler($suggester);
+        $solQuery->setQuery($term);
+        $solQuery->setCount($count);
+
+        $resultSet = $this->solClient->suggester($solQuery);
+        $solQuery->getResponseParser()->parse($resultSet);
+
+        $return = [];
+
+        $result = end($resultSet->getData()['suggest']['default']);
+
+        if(sizeof($result['suggestions']) > 0) {
+            foreach ($result['suggestions'] as $termResult) {
+                $return[] = $termResult['term'];
+            }
+        }
+
+        return $return;
+    }
+
+    /**
+     * Returns a Solr supported timestamp for a given timestamp.
+     *
+     * @param $timestamp
+     *
+     * @return string
+     */
+    public function solrTimestamp($timestamp = null) {
+        if(!$timestamp) $timestamp = time();
+        return strftime("%Y-%m-%dT%H:%M:%SZ", $timestamp);
+    }
+
+    /**
+     * Remove CTRL-LF from document data
+     * Courtesy of Kelvin Tan
+     *
+     * @param object    $doc
+     */
+    protected function cleanDocument($doc) {
+        // Remove CTRL-LF
+        // https://github.com/basdenooijer/solarium/issues/180
+        foreach ($doc as $k => $v) {
+            if(is_string($v)) {
+                $doc[$k] = preg_replace('@[\x00-\x08\x0B\x0C\x0E-\x1F]@', ' ', $v);
+            }
+        }
+    }
+} 

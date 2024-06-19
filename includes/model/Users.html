@@ -1,0 +1,124 @@
+
+
+namespace TradeOnUp\Models;
+
+use TradeOnUp\Core\Database;
+
+class Users extends Model {
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Lookup Functions
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    public static function getUser($user) {
+        $db = Database::getInstance();
+        $row = null;
+        $whereClause = null;
+
+        if(is_numeric($user)) {
+            $whereClause = "u.id = '$user'";
+        } elseif(is_string($user)) {
+            $user = $db->real_escape_string($user);
+
+            if(filter_var($user, FILTER_VALIDATE_EMAIL)) {
+                $whereClause = "u.email = '$user'";
+            } else {
+                $whereClause = "u.username = '$user'";
+            }
+        } elseif(is_array($user) && isset($user['id']) && is_numeric($user['id'])) {
+            $user['id'] = (int)$user['id'];
+
+            if($user['id'] > 0) {
+                $whereClause = "u.id = '{$user['id']}'";
+            }
+        }
+
+        if(!is_null($whereClause)) {
+            $row = $db->querySingleRow("SELECT * FROM Users u WHERE $whereClause LIMIT 1");
+        }
+
+        if(is_array($row)) {
+            return $row;
+        }
+
+        return null;
+    }
+
+    public static function getUserProfile($user) {
+        $userProfile = self::getUser($user);
+
+        if($userProfile) {
+            //Cut out vulnerable info (this whole function is dumb)
+            unset($userProfile['password']);
+            unset($userProfile['email']);
+            unset($userProfile['isAdmin']);
+
+            return $userProfile;
+        }
+
+        return null;
+    }
+
+    public static function getUserSuggestions($ids) {
+        $db = Database::getInstance();
+        $rows = null;
+        $whereClause = null;
+
+        if(is_numeric($ids)) {
+            $whereClause = "u.id = '$ids'";
+        } elseif(is_array($ids)) {
+            $whereClause = 'u.id IN (';
+
+            foreach($ids as $id) {
+                $whereClause .= (int)$id . ", ";
+            }
+
+            $whereClause = rtrim($whereClause, ", ");
+            $whereClause .= ")";
+        }
+
+        if(!is_null($whereClause)) {
+            $rows = $db->queryMultipleRows("SELECT id, username as `value`, firstName, lastName, location, avatar FROM Users u WHERE $whereClause");
+        }
+
+        if(is_array($rows)) {
+            return $rows;
+        }
+
+        return null;
+    }
+
+    public static function updateUserReviews($user) {
+        $db = Database::getInstance();
+
+        if(is_numeric($user)) {
+            $whereClause = "u.id = '$user'";
+        } elseif(is_string($user)) {
+            $user = $db->real_escape_string($user);
+
+            if(filter_var($user, FILTER_VALIDATE_EMAIL)) {
+                $whereClause = "u.email = '$user'";
+            } else {
+                $whereClause = "u.username = '$user'";
+            }
+        } elseif(is_array($user) && isset($user['id']) && is_numeric($user['id'])) {
+            $user['id'] = (int)$user['id'];
+
+            if($user['id'] > 0) {
+                $whereClause = "u.id = '{$user['id']}'";
+            }
+        }
+
+        if(!is_null($whereClause)) {
+            $affected = $db->queryAffected("UPDATE Users u SET
+                                u.averageStars = (SELECT ROUND(AVG(r.starRating), 0) FROM Reviews r WHERE r.userID = u.id),
+                                u.positiveReviews = (SELECT COUNT(rr.id) FROM `Reviews` rr WHERE rr.starRating >= 3 AND rr.userID = u.id)
+                                WHERE $whereClause");
+
+            if($affected) return $affected;
+        }
+
+        return false;
+    }
+
+}

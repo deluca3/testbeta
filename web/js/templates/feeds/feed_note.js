@@ -1,0 +1,1 @@
+(function(){dust.register("feed_note",body_0);function body_0(chk,ctx){return chk.write("<div class=\"feedHeader\"><a href=\"/profile/").reference(ctx.get("ownUser"),ctx,"h").write("\">").reference(ctx.get("ownUser"),ctx,"h").write("</a></div><div class=\"feedText\">").reference(ctx.get("note"),ctx,"h").write("</div>");}return body_0;})();

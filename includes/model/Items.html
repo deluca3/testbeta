@@ -1,0 +1,276 @@
+
+
+namespace TradeOnUp\Models;
+
+use TradeOnUp\Core\Database;
+use TradeOnUp\Models\Users;
+use TradeOnUp\Core\Log;
+
+class Items extends Model {
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Lookup Functions
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    public static function getItemsForUser($user, $onlyListed = false, $offersAtTop = false) {
+        $db = Database::getInstance();
+        $whereClause = null;
+
+        if(is_numeric($user)) {
+            $whereClause = "i.userID = '$user'";
+        } elseif(is_string($user)) {
+            $userData = Users::getUser($user);
+
+            if(is_array($userData)) {
+                $whereClause = "i.userID = '{$userData['id']}'";
+            }
+        } elseif(is_array($user) && isset($user['id']) && is_numeric($user['id'])) {
+            $user['id'] = (int)$user['id'];
+
+            if($user['id'] > 0) {
+                $whereClause = "i.userID = '{$user['id']}'";
+            }
+        }
+
+        if(!is_null($whereClause)) {
+            if($onlyListed) {
+                $whereClause .= " AND i.listed = '1'";
+            }
+
+            if($offersAtTop) {
+                $rows = $db->queryMultipleRows("SELECT * FROM `Items` i WHERE $whereClause AND i.quantity > 0 AND i.endedAt IS NULL
+                                                ORDER BY (SELECT COUNT(*) FROM `Offers` o WHERE o.itemID = i.id AND o.rejected = 0 AND o.endedAt IS NULL) DESC, i.addedAt DESC");
+            } else {
+                $rows = $db->queryMultipleRows("SELECT * FROM `Items` i WHERE $whereClause AND i.quantity > 0 AND i.endedAt IS NULL ORDER BY i.addedAt DESC");
+            }
+        }
+
+        if(is_array($rows)) {
+            return $rows;
+        }
+
+        return null;
+    }
+
+    public static function getRandomItems($numItems = 1, $user = null) {
+        $db = Database::getInstance();
+        $rows = null;
+        $whereClause = null;
+
+        if(is_numeric($user)) {
+            $whereClause = "i.userID = '$user'";
+        } elseif(!is_null($user)) {
+            $userData = Users::getUser($user);
+
+            if(is_array($userData)) {
+                $whereClause = "i.userID = '{$userData['id']}'";
+            }
+        }/* else $whereClause = "";*/
+
+        if(!is_null($whereClause) && is_numeric($numItems)) {
+            $numItems = (int)$numItems;
+
+            //TODO: These queries need to be looked at by someone better at SQL than I. Likely slow on large data sets.
+            if(!is_null($user)) {
+                $rows = $db->queryMultipleRows("SELECT * FROM Items i WHERE i.listed = 1 AND $whereClause AND i.quantity > 0 AND i.endedAt IS NULL ORDER BY RAND() LIMIT $numItems");
+            }/* else {
+                $rows = $db->queryMultipleRows("SELECT *
+                                                  FROM Items AS r1 JOIN
+                                                       (SELECT (RAND() *
+                                                                     (SELECT MAX(id)
+                                                                        FROM Items)) AS id)
+                                                        AS r2
+                                                 WHERE r1.id >= r2.id
+                                                 ORDER BY r1.id ASC
+                                                 LIMIT $numItems");
+            }*/
+        }
+
+        if(is_array($rows)) {
+            return $rows;
+        }
+
+        return null;
+    }
+
+    public static function getItemWithThumb($id) {
+        $db = Database::getInstance();
+        $row = null;
+        $whereClause = null;
+
+        if(is_numeric($id)) {
+            $whereClause = "i.id = '$id'";
+        }
+
+        if(!is_null($whereClause)) {
+            $row = $db->querySingleRow("SELECT *, i.id as id FROM Items i LEFT JOIN ItemImages ii ON i.thumbImageID = ii.id WHERE $whereClause");
+        }
+
+        if(is_array($row)) {
+            return $row;
+        }
+
+        return null;
+    }
+
+    public static function getItemWithUser($id) {
+        $db = Database::getInstance();
+        $row = null;
+        $whereClause = null;
+
+        if(is_numeric($id)) {
+            $whereClause = "i.id = '$id'";
+        }
+
+        if(!is_null($whereClause)) {
+            $row = $db->querySingleRow("SELECT i.*, ii.*, u.username, u.avatar, u.location, i.id as id FROM Items i LEFT JOIN ItemImages ii ON i.thumbImageID = ii.id LEFT JOIN Users u ON i.userID = u.id WHERE $whereClause");
+        }
+
+        if(is_array($row)) {
+            return $row;
+        }
+
+        return null;
+    }
+
+    public static function getItemsForIds($ids) {
+        $db = Database::getInstance();
+        $rows = null;
+        $whereClause = null;
+
+        if(is_numeric($ids)) {
+            $whereClause = "i.id = '$ids'";
+        } elseif(is_array($ids)) {
+            $whereClause = 'i.id IN (';
+
+            foreach($ids as $id) {
+                $whereClause .= (int)$id . ", ";
+            }
+
+            $whereClause = rtrim($whereClause, ", ");
+            $whereClause .= ")";
+        }
+
+        if(!is_null($whereClause)) {
+            $rows = $db->queryMultipleRows("SELECT *, i.id as id FROM Items i LEFT JOIN ItemImages ii ON i.thumbImageID = ii.id WHERE $whereClause");
+        }
+
+        if(is_array($rows)) {
+            return $rows;
+        }
+
+        return null;
+    }
+
+    public static function getItemSearchForIds($ids) {
+        $db = Database::getInstance();
+        $rows = null;
+        $whereClause = null;
+
+        if(is_numeric($ids)) {
+            $whereClause = "i.id = '$ids'";
+        } elseif(is_array($ids)) {
+            $whereClause = 'i.id IN (';
+
+            foreach($ids as $id) {
+                $whereClause .= (int)$id . ", ";
+            }
+
+            $whereClause = rtrim($whereClause, ", ");
+            $whereClause .= ")";
+        }
+
+        if(!is_null($whereClause)) {
+            $rows = $db->queryMultipleRows("SELECT i.id as id, i.name, i.description, i.quantity, i.itemCondition, ii.url,
+                                            u.username, u.avatar, u.location, u.firstName, u.lastName, u.id as userID, u.averageStars
+                                            FROM Items i LEFT JOIN Users u ON i.userID = u.id
+                                            LEFT JOIN ItemImages ii ON i.thumbImageID = ii.id WHERE $whereClause");
+        }
+
+        if(is_array($rows)) {
+            return $rows;
+        }
+
+        return null;
+    }
+
+    public static function getItemSuggestions($ids) {
+        $db = Database::getInstance();
+        $rows = null;
+        $whereClause = null;
+
+        if(is_numeric($ids)) {
+            $whereClause = "i.id = '$ids'";
+        } elseif(is_array($ids)) {
+            $whereClause = 'i.id IN (';
+
+            foreach($ids as $id) {
+                $whereClause .= (int)$id . ", ";
+            }
+
+            $whereClause = rtrim($whereClause, ", ");
+            $whereClause .= ")";
+        }
+
+        if(!is_null($whereClause)) {
+            $rows = $db->queryMultipleRows("SELECT i.id, i.name as `value`, i.description, i.tags FROM Items i WHERE $whereClause AND i.quantity > 0 AND i.endedAt IS NULL");
+        }
+
+        if(is_array($rows)) {
+            return $rows;
+        }
+
+        return null;
+    }
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Delete Functions
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    public static function deleteItemAndImages($item) {
+        $db = Database::getInstance();
+        $wasDeleted = false;
+        $itemWhereClause = null;
+        $imageWhereClause = null;
+
+        if(is_numeric($item)) {
+            $itemWhereClause = "id = '$item'";
+            $imageWhereClause = "itemID = '$item'";
+        } elseif(is_array($item) && isset($item['id']) && is_numeric($item['id'])) {
+            $item['id'] = (int)$item['id'];
+
+            if($item['id'] > 0) {
+                $itemWhereClause = "id = '{$item['id']}'";
+                $imageWhereClause = "itemID = {$item['id']}";
+            }
+        }
+
+        //TODO: Rewrite to ensure item is deleted before we move images to be deleted.
+
+        //Move images to DeletedImages
+        if(!is_null($imageWhereClause)) {
+            $imageRows = $db->queryMultipleRows("SELECT url FROM ItemImages WHERE $imageWhereClause");
+
+            if(is_array($imageRows)) {
+                $insertValues = "(";
+
+                foreach($imageRows as $imageRow) {
+                    $imageRow['url'] = $db->real_escape_string($imageRow['url']); //Just to be safe.
+                    $insertValues .= "'{$imageRow['url']}'), (";
+                }
+
+                $insertValues = rtrim($insertValues, ", (");
+
+                $db->queryInsert("INSERT INTO DeletedImages (url) VALUES $insertValues");
+            }
+        }
+
+        //This delete will clear the ItemImages as well due to foreign key constraints.
+        if(!is_null($itemWhereClause)) {
+            $wasDeleted = $db->queryAffected("DELETE FROM Items i WHERE $itemWhereClause LIMIT 1");
+        }
+
+        return $wasDeleted ? true : false;
+    }
+
+}

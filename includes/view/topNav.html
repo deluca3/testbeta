@@ -1,0 +1,88 @@
+
+include_once("/tou/includes/model/Model.php");
+include_once("/tou/includes/model/Users.php");
+include_once("/tou/includes/model/Messages.php");
+include_once("/tou/includes/model/Notifications.php");
+
+use TradeOnUp\Models\Messages;
+use TradeOnUp\Models\Notifications;
+
+if(@$_SESSION['auth']) {
+    $numMsgs = Messages::getUnreadCount($_SESSION['userID']);
+    if((int)$numMsgs <= 0) $numMsgs = "";
+
+    $numNotif = Notifications::getUnseenCount($_SESSION['userID']);
+    if((int)$numNotif <= 0) $numNotif = "";
+}
+
+
+
+<div class="navbar navbar-fixed-top touNav gradient noLinkOutline">
+    <div class="container">
+
+        <div class="navbar-header">
+            <a class="navbar-brand" style="height: 43px;" href="/">
+                <img src="/img/logo_arrow.png" class="navLogo">
+            </a>
+        </div>
+
+        <div class="navbar-collapse collapse">
+            <ul class="nav navbar-nav navbar-right">
+                 if(@$_SESSION['auth']): 
+                    <li><a href="/"><i class="icon-home" style="">&nbsp;</i></a></li>
+                    <li>
+                        <a href="/messages">
+                            <i class="icon-comments" style=""></i>
+                            <div id="nav_msgBadge"  if($numMsgs == "") echo 'style="display:none;"';  class="badge"> echo $numMsgs; </div>
+                        </a>
+                    </li>
+                    <li>
+                        <a id="btnNavNotifications" href="#">
+                            <i class="icon-bolt" style=""></i>
+                            <div id="nav_notifBadge"  if($numNotif == "") echo 'style="display:none;"';  class="badge"> echo $numNotif; </div>
+                        </a>
+                    </li>
+                    <li><a href="/profile"><i class="icon-user" style="">&nbsp;</i><span id="navUser"> echo $_SESSION['username']; </span></a></li>
+
+                    <li class="dropdown">
+                        <a href="#" class="dropdown-toggle" data-toggle="dropdown">
+                            <i class="icon-cog"></i>
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a href="/settings">Account Settings</a></li>
+                            <li><a href="/privacy">Privacy Settings</a></li>
+                            <li class="divider"></li>
+                            <li><a href="/bugreport">Report a Bug</a></li>
+                            <li class="divider"></li>
+                            <li><a href="/logout">Log Out</a></li>
+                        </ul>
+                    </li>
+                 else: 
+                    <li><a href="/login?reg=1">Sign Up</a></li>
+                    <li><a href="/login">Login</a></li>
+                 endif; 
+            </ul>
+
+            <div class="input-group input-group-sm touSearch">
+                <input type="text" id="txtSiteSearch" placeholder="Search merchandise and people" class="form-control siteSearch input-sm">
+
+                <span id="btnSiteSearch" class="input-group-addon">
+                    <label style="margin:0; cursor: pointer;" for="txtSiteSearch">
+                        <i class="icon-search"></i>
+                    </label>
+                </span>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<div id="navNotifications" style="display: none">
+    <div id="notifContainer">
+        <div style="text-align: center;">
+            Loading Notifications...
+            <br/>
+            <img src="/img/ajax-loader.gif"/>
+        </div>
+    </div>
+</div>

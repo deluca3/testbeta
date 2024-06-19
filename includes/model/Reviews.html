@@ -1,0 +1,129 @@
+
+/**
+ * Copyright 2014 Trade On Up LLC.
+ * Originally written by Gage on 3/5/14
+ */
+
+namespace TradeOnUp\Models;
+
+use TradeOnUp\Core\Database;
+
+class Reviews extends Model {
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Lookup Functions
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    public static function getReviewsForUser($user) {
+        $db = Database::getInstance();
+        $whereClause = null;
+        $rows = null;
+
+        if(is_numeric($user)) {
+            $whereClause = "r.userID = '$user'";
+        } elseif(is_string($user)) {
+            $userData = Users::getUser($user);
+
+            if(is_array($userData)) {
+                $whereClause = "r.userID = '{$userData['id']}'";
+            }
+        } elseif(is_array($user) && isset($user['id']) && is_numeric($user['id'])) {
+            $user['id'] = (int)$user['id'];
+
+            if($user['id'] > 0) {
+                $whereClause = "r.userID = '{$user['id']}'";
+            }
+        }
+
+        if(!is_null($whereClause)) {
+            $rows = $db->queryMultipleRows("SELECT r.*, UNIX_TIMESTAMP(r.addedAt) as addedAt, u.username, u.avatar, i.name, ii.url
+                                            FROM `Reviews` r
+                                            LEFT JOIN `Users` u ON r.fromUserID = u.id
+                                            LEFT JOIN `Transactions` t ON r.transactionID = t.id
+                                            LEFT JOIN `Items` i ON t.itemID = i.id
+                                            LEFT JOIN `ItemImages` ii ON i.thumbImageID = ii.id
+                                            WHERE $whereClause AND r.id = t.reviewed ORDER BY r.addedAt DESC");
+        }
+
+        if(is_array($rows)) {
+            return $rows;
+        }
+
+        return null;
+    }
+
+    public static function getOfferReviewsForUser($user) {
+        $db = Database::getInstance();
+        $whereClause = null;
+        $rows = null;
+
+        if(is_numeric($user)) {
+            $whereClause = "r.userID = '$user'";
+        } elseif(is_string($user)) {
+            $userData = Users::getUser($user);
+
+            if(is_array($userData)) {
+                $whereClause = "r.userID = '{$userData['id']}'";
+            }
+        } elseif(is_array($user) && isset($user['id']) && is_numeric($user['id'])) {
+            $user['id'] = (int)$user['id'];
+
+            if($user['id'] > 0) {
+                $whereClause = "r.userID = '{$user['id']}'";
+            }
+        }
+
+        if(!is_null($whereClause)) {
+            $rows = $db->queryMultipleRows("SELECT r.*, UNIX_TIMESTAMP(r.addedAt) as addedAt, u.username, u.avatar, ii.url,
+                                            (SELECT GROUP_CONCAT(sq_i.name SEPARATOR ', ') FROM `Items` sq_i WHERE sq_i.id IN (SELECT sq_ol.offerItemID FROM `OfferLists` sq_ol WHERE sq_ol.offerID = o.id)) AS `name`
+                                            FROM `Reviews` r
+                                            LEFT JOIN `Users` u ON r.fromUserID = u.id
+                                            LEFT JOIN `Transactions` t ON r.transactionID = t.id
+                                            LEFT JOIN `Offers` o ON t.offerID = o.id
+                                            LEFT JOIN `Items` i ON i.id = (SELECT ol.offerItemID FROM `OfferLists` ol WHERE ol.offerID = o.id LIMIT 1)
+                                            LEFT JOIN `ItemImages` ii ON i.thumbImageID = ii.id
+                                            WHERE $whereClause AND r.id = t.offerReviewed ORDER BY r.addedAt DESC");
+        }
+
+        if(is_array($rows)) {
+            return $rows;
+        }
+
+        return null;
+    }
+
+    public static function getReviewAverageForUser($user) {
+        $db = Database::getInstance();
+        $whereClause = null;
+        $row = null;
+
+        if(is_numeric($user)) {
+            $whereClause = "u.id = '$user'";
+        } elseif(is_string($user)) {
+            $userData = Users::getUser($user);
+
+            if(is_array($userData)) {
+                $whereClause = "u.id = '{$userData['id']}'";
+            }
+        } elseif(is_array($user) && isset($user['id']) && is_numeric($user['id'])) {
+            $user['id'] = (int)$user['id'];
+
+            if($user['id'] > 0) {
+                $whereClause = "u.id = '{$user['id']}'";
+            }
+        }
+
+        if(!is_null($whereClause)) {
+            $row = $db->querySingleRow("SELECT u.averageStars as `rating`, u.positiveReviews as `count` FROM Users u WHERE $whereClause");
+        }
+
+        if(is_array($row)) {
+            if(is_null($row['rating']) || $row['rating'] < 0) $row['rating'] = 0;
+            elseif($row['rating'] > 5) $row['rating'] = 5;
+
+            return $row;
+        }
+
+        return null;
+    }
+}

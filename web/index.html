@@ -1,0 +1,165 @@
+
+//$_doRedirect = true; //Will redirect to login page if non-authenticated user attempts to get here.
+include("/tou/includes/authValidate.php"); 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Home &middot; Trade On Up</title>
+    <meta name="description" content="Trade up until you get what you want">
+    <meta name="author" content="Trade On Up">
+
+    <!-- Le styles -->
+    <link href='http://fonts.googleapis.com/css?family=Open+Sans:400,300,600,700,800' rel='stylesheet' type='text/css'>
+    <link href="/css/bootstrap.css" type="text/css" rel="stylesheet">
+    <link href="/css/bootstrap-fixed.css" type="text/css" rel="stylesheet">
+
+    <link rel="stylesheet" href="/css/font-awesome.css">
+
+    <!--[if IE 7]>
+    <link rel="stylesheet" href="/css/font-awesome-ie7.css">
+    <![endif]-->
+
+    <link href="/css/typeahead.js-bootstrap.css" type="text/css" rel="stylesheet">
+    <link href="/css/bootstrap-modal-bs3patch.css" type="text/css" rel="stylesheet">
+    <link href="/css/bootstrap-modal.css" type="text/css" rel="stylesheet">
+
+    <link href="/css/tradeonup.css" type="text/css" rel="stylesheet">
+
+    <link href="/css/magnific-popup.css" type="text/css" rel="stylesheet">
+
+    <!-- IE support -->
+    <!--[if lt IE 9]>
+    <script src="/js/html5shiv.js" type="text/javascript"></script>
+    <script src="/js/respond.src.js" type="text/javascript"></script>
+    <script src="/js/core/ieFix.js" type="text/javascript"></script>
+
+    <link href="/css/tradeonup-ie.css" type="text/css" rel="stylesheet">
+    <![endif]-->
+
+    <!--[if gte IE 9]>
+    <style type="text/css">
+        .gradient {
+            filter: none !important;
+        }
+    </style>
+    <![endif]-->
+
+    <!-- Fav icon -->
+    <link rel="shortcut icon" href="/img/favicon.ico">
+</head>
+
+<body>
+
+ include("/tou/includes/view/topNav.php"); 
+
+<div class="homeContainer fixedHeaderPadding">
+    <div id="mainCarousel" class="carousel slide" data-ride="carousel">
+        <!-- Indicators -->
+        <ol class="carousel-indicators">
+            <li data-target="#mainCarousel" data-slide-to="0" class="active"></li>
+            <li data-target="#mainCarousel" data-slide-to="1"></li>
+            <li data-target="#mainCarousel" data-slide-to="2"></li>
+        </ol>
+
+        <!-- Wrapper for slides -->
+        <div class="carousel-inner">
+            <div class="item active hugeItem" style="background-image: url(/img/home/slide1.jpg);">
+
+            </div>
+
+            <div class="item hugeItem fromTop" style="background-image: url(/img/home/slide2.jpg);">
+
+            </div>
+
+            <div class="item hugeItem fromTop" style="background-image: url(/img/home/slide3.jpg);">
+
+            </div>
+        </div>
+    </div>
+
+    <div id="categoryNav" class="navbar" style="margin-bottom: 0;">
+        <div class="container">
+            <ul class="nav navbar-nav">
+                <li><a href="#">Music</a></li>
+                <li><a href="#">Art</a></li>
+                <li><a href="#">Clothing</a></li>
+                <li><a href="#">Home & Garden</a></li>
+                <li><a href="#">Electronics</a></li>
+                <li class="dropdown">
+                    <a href="#" class="dropdown-toggle" data-toggle="dropdown">More <b class="caret"></b></a>
+                    <ul class="dropdown-menu">
+                        <li><a href="#">Wine</a></li>
+                        <li><a href="#">Automotive</a></li>
+                        <li><a href="#">Misc</a></li>
+                    </ul>
+                </li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="sectionHero"></div>
+
+    <div style="padding-top: 40px;" class="container">
+
+        <div style="margin: 0 30px;">
+            <div class="flatToggle pull-right">
+                <a href="#" class="active">Local</a>
+                <a href="#">National</a>
+            </div>
+
+            <h1 class="headerOrange">Most Popular</h1>
+            <h3 class="subHeaderGray">An assortment of items getting a lot of attention.</h3>
+        </div>
+
+        <div id="sec1" class="heroInner">
+            <div style="text-align: center;">
+                <img src="/img/ajax-loader.gif" />
+            </div>
+        </div>
+    </div>
+
+    <div class="blueHero">
+        <div class="container" style="padding-top: 40px">
+            <div style="margin: 0 30px;">
+                <h1 class="headerWhite">How It Works</h1>
+                <h3 class="subHeaderWhite">A platform for people to trade, buy and sell their items.</h3>
+
+                <div style="text-align: center; margin-left: auto; margin-right: auto;">
+                    <img src="/img/touHow.png"/>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="sectionHero"></div>
+
+    <div style="padding-top: 40px;" class="container">
+
+        <div style="margin: 0 30px;">
+            <h1 class="headerOrange">Favorite Items</h1>
+            <h3 class="subHeaderGray">A hand-picked selection of items that we know you'll love.</h3>
+        </div>
+
+        <div id="sec2" class="heroInner">
+            <div style="text-align: center;">
+                <img src="/img/ajax-loader.gif" />
+            </div>
+        </div>
+    </div>
+</div>
+
+ include("/tou/includes/view/footer.php"); 
+
+<!-- Le javascript
+================================================== -->
+<!-- Placed at the end of the document so the pages load faster -->
+
+ include("/tou/includes/view/globalInc.php"); 
+
+<script src="/js/page-includes/root/index.js" type="text/javascript"></script>
+
+<script src="/js/templates/home_itemBox.js" type="text/javascript"></script>
+
+</body>
+</html>

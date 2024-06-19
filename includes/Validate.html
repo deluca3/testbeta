@@ -1,0 +1,277 @@
+
+/**
+ * Copyright 2013 Trade On Up LLC.
+ * Originally written by Gage on 9/19/13
+ */
+
+namespace TradeOnUp\Core;
+
+use TradeOnUp\Models\Items;
+use TradeOnUp\Models\Trades;
+use TradeOnUp\Models\ItemImages;
+use TradeOnUp\Models\Messages;
+use TradeOnUp\Models\Offers;
+use TradeOnUp\Models\Wishlists;
+
+class Validate {
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Items
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    public static function itemOwner($item, $userID) {
+        $itemID = null;
+        $multiID = false;
+
+        if(is_int($item)) $itemID = $item;
+        elseif(is_string($item)) $itemID = (int)$item;
+        elseif(is_array($item) && isset($item['id'])) $itemID = $item['id'];
+        elseif(is_array($item)) {
+            $multiID = true;
+        }
+
+        if(!$multiID) {
+            if(!is_null($itemID) && $itemID > 0) {
+                $itemLookup = Items::getById($itemID);
+
+                if(is_array($itemLookup)) {
+                    if(isset($itemLookup['id']) && $itemLookup['id'] > 0
+                        && $itemLookup['userID'] == (int)$userID) {
+
+                        return $itemLookup;
+                    }
+                }
+            }
+        } else {
+            $itemLookup = Items::getByField($item);
+            $isOwner = true;
+
+            if(is_array($itemLookup)) {
+                foreach($itemLookup as $itemData) {
+                    if(isset($itemData['id']) && $itemData['id'] > 0
+                        && $itemData['userID'] != (int)$userID) {
+
+                        $isOwner = false;
+                    }
+                }
+
+                if($isOwner) {
+                    return $itemLookup;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public static function itemContents($item) {
+        //TODO: Write item content validation
+        return true;
+    }
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Offers
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    public static function offerOwner($offer, $userID) {
+        $offerID = null;
+
+        if(is_int($offer)) $offerID = $offer;
+        elseif(is_array($offer)) $offerID = $offer['id'];
+
+        if(!is_null($offerID) && $offerID > 0) {
+            $offerLookup = Offers::getById($offerID);
+
+            if(is_array($offerLookup)) {
+                if(isset($offerLookup['id']) && $offerLookup['id'] > 0
+                    && $offerLookup['userID'] == (int)$userID) {
+
+                    return $offerLookup;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   ItemImages
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    public static function itemImageOwner($itemImage, $userID) {
+        $imageID = null;
+
+        if(is_int($itemImage)) $imageID = $itemImage;
+        elseif(is_array($itemImage)) $imageID = $itemImage['id'];
+
+        if(!is_null($imageID) && $imageID > 0) {
+            $imageLookup = ItemImages::getById($imageID);
+
+            if(is_array($imageLookup)) {
+                if(isset($imageLookup['id']) && $imageLookup['id'] > 0
+                    && $imageLookup['userID'] == (int)$userID) {
+
+                    return $imageLookup;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public static function itemImagesOwner($itemImages, $userID) {
+        $imageIDs = [];
+        $imageLookup = null;
+
+        if(is_array($itemImages)) {
+            foreach($itemImages as $itemImage) {
+                if((int)$itemImage > 0) {
+                    $imageIDs[] = (int)$itemImage;
+                }
+            }
+
+            if(sizeof($imageIDs) > 0) {
+                $imageLookup = ItemImages::getByField($imageIDs, "id");
+
+                if(is_array($imageLookup)) {
+                    foreach($imageLookup as $itemImage) {
+                        if($itemImage['userID'] != (int)$userID) {
+                            return false;
+                        }
+                    }
+
+                    return $imageLookup;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Messages
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    public static function messageOwner($message, $userID, &$ownership = null) {
+        $msgID = null;
+
+        if(is_int($message)) $msgID = $message;
+        elseif(is_array($message)) $msgID = $message['id'];
+
+        if(!is_null($msgID) && $msgID > 0) {
+            $msgLookup = Messages::view_getById($msgID);
+
+            if(is_array($msgLookup)) {
+                if(isset($msgLookup['id']) && $msgLookup['id'] > 0) {
+                    $hasOwnership = false;
+                    if(!is_null($ownership)) $ownership = [];
+
+                    if($msgLookup['fromUserID'] == (int)$userID) {
+                        if(!is_null($ownership)) $ownership['from'] = true;
+                        $hasOwnership = true;
+                    }
+
+                    if($msgLookup['toUserID'] == (int)$userID) {
+                        if(!is_null($ownership)) $ownership['to'] = true;
+                        $hasOwnership = true;
+                    }
+
+                    if($hasOwnership) return $msgLookup;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public static function messagesOwner($messages, $userID, &$ownership = null) {
+        $msgIDs = [];
+        $msgLookup = null;
+
+        if(is_array($messages)) {
+            foreach($messages as $message) {
+                if((int)$message > 0) {
+                    $msgIDs[] = (int)$message;
+                }
+            }
+
+            if(sizeof($msgIDs) > 0) {
+                $msgLookup = Messages::getByField($msgIDs, "id");
+
+                if(is_array($msgLookup)) {
+                    if(!is_null($ownership)) $ownership = [];
+
+                    foreach($msgLookup as $index => $message) {
+                        $hasOwnership = false;
+
+                        if($message['fromUserID'] == (int)$userID) {
+                            if(!is_null($ownership)) $ownership[$index]['from'] = true;
+                            $hasOwnership = true;
+                        }
+
+                        if($message['toUserID'] == (int)$userID) {
+                            if(!is_null($ownership)) $ownership[$index]['to'] = true;
+                            $hasOwnership = true;
+                        }
+
+                        if(!$hasOwnership) return false;
+                    }
+
+                    return $msgLookup;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#
+    *   Wishlists
+    #*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*#*/
+
+    public static function wishOwner($wish, $userID) {
+        $wishID = null;
+        $multiID = false;
+
+        if(is_int($wish)) $wishID = $wish;
+        elseif(is_string($wish)) $wishID = (int)$wish;
+        elseif(is_array($wish) && isset($wish['id'])) $wishID = $wish['id'];
+        elseif(is_array($wish)) {
+            $multiID = true;
+        }
+
+        if(!$multiID) {
+            if(!is_null($wishID) && $wishID > 0) {
+                $wishLookup = Wishlists::getById($wishID);
+
+                if(is_array($wishLookup)) {
+                    if(isset($wishLookup['id']) && $wishLookup['id'] > 0
+                        && $wishLookup['userID'] == (int)$userID) {
+
+                        return $wishLookup;
+                    }
+                }
+            }
+        } else {
+            $wishLookup = Wishlists::getByField($wish);
+            $isOwner = true;
+
+            if(is_array($wishLookup)) {
+                foreach($wishLookup as $wishData) {
+                    if(isset($wishData['id']) && $wishData['id'] > 0
+                        && $wishData['userID'] != (int)$userID) {
+
+                        $isOwner = false;
+                    }
+                }
+
+                if($isOwner) {
+                    return $wishLookup;
+                }
+            }
+        }
+
+        return false;
+    }
+
+}

@@ -1,0 +1,46 @@
+
+
+define('KB', 1024);
+define('MB', 1048576);
+define('GB', 1073741824);
+define('TB', 1099511627776);
+
+require('/tou/vendor/restler.php');
+
+require_once('/tou/includes/Core.php');
+require_once('/tou/includes/ImageUtilities.php');
+require_once('/tou/includes/Validate.php');
+require_once('/tou/includes/BBCode.php');
+require_once('/tou/includes/Utility.php');
+require('/tou/api/v1/apiCache.php');
+require('/tou/api/v1/Account.php');
+require('/tou/api/v1/Items.php');
+require('/tou/api/v1/Offers.php');
+require('/tou/api/v1/Transactions.php');
+require('/tou/api/v1/Messages.php');
+require('/tou/api/v1/Upload.php');
+require('/tou/api/v1/Image.php');
+require('/tou/api/v1/Search.php');
+require('/tou/api/v1/Authenticate.php');
+
+use Luracast\Restler\Restler;
+use Luracast\Restler\Defaults;
+
+Defaults::$smartAutoRouting = false;
+Defaults::$emptyBodyForNullResponse = false;
+Defaults::$cacheClass = 'TradeOnUp\API\apiCache';
+
+$api = new Restler(); //TODO: Pass in true for first param for production mode - enables route caching.
+
+$api->setSupportedFormats('JsonFormat', 'UploadFormat');
+$api->addAuthenticationClass('TradeOnUp\API\Authenticate');
+$api->addAPIClass('TradeOnUp\API\Account');
+$api->addAPIClass('TradeOnUp\API\Items');
+$api->addAPIClass('TradeOnUp\API\Offers');
+$api->addAPIClass('TradeOnUp\API\Transactions');
+$api->addAPIClass('TradeOnUp\API\Messages');
+$api->addAPIClass('TradeOnUp\API\Upload');
+$api->addAPIClass('TradeOnUp\API\Image');
+$api->addAPIClass('TradeOnUp\API\Search');
+
+$api->handle();

@@ -1,0 +1,305 @@
+
+/**
+ * Copyright 2014 Trade On Up LLC.
+ * Originally written by Gage on 6/4/14
+ */
+
+namespace TradeOnUp\Core\AWS;
+
+/**
+ * Amazon Cloud Services CloudSearch Wrapper
+ *
+ * Requires cURL extension.
+ *
+ * Class CloudSearch
+ * @package TradeOnUp\Core\AWS
+ */
+class CloudSearch {
+    protected $searchUrl = 'https://search-tou-item-search-cqqqwslvelofnlyi2tmhyns7vq.us-east-1.cloudsearch.amazonaws.com/2013-01-01/search';
+    protected $documentUrl = 'https://doc-tou-item-search-cqqqwslvelofnlyi2tmhyns7vq.us-east-1.cloudsearch.amazonaws.com/2013-01-01/documents/batch';
+
+    protected $validFields = ['id', 'userID', 'name', 'description', 'tags', 'category',
+            'views', 'itemCondition', 'buyNow', 'quantity', 'allowCash', 'allowTrades', 'listed'];
+
+    protected $returnFields = ['id', 'userid', 'name', 'category', 'itemcondition', 'listed']; //Must be lower case.
+
+    public function __construct($docUrl = null, $searchUrl = null) {
+        if($docUrl) $this->documentUrl = $docUrl;
+        if($searchUrl) $this->searchUrl = $searchUrl;
+    }
+
+    /**
+     * Returns the fields allowed for document add operations
+     *
+     * @return array
+     */
+    public function getDocumentFields() {
+        return $this->validFields;
+    }
+
+    /**
+     * Sets the fields allowed for document add operations
+     *
+     * @param array $fieldArray
+     *
+     * @throws \Exception
+     */
+    public function setDocumentFields(Array $fieldArray) {
+        foreach($fieldArray as $field) {
+            if(!is_string($field)) {
+                throw new \Exception("fieldArray must be an array of strings");
+            }
+        }
+
+        $this->validFields = $fieldArray;
+    }
+
+    /**
+     * Returns the fields that will be returned from search operations
+     *
+     * @return array
+     */
+    public function getSearchFields() {
+        return $this->returnFields;
+    }
+
+    /**
+     * Sets the fields that will be returned from search operations
+     *
+     * @param $fieldArray
+     *
+     * @throws \Exception
+     */
+    public function setSearchFields(Array $fieldArray) {
+        foreach($fieldArray as &$field) {
+            if(!is_string($field)) {
+                throw new \Exception("fieldArray must be an array of strings");
+            } else {
+                $field = strtolower($field);
+            }
+        }
+
+        $this->returnFields = $fieldArray;
+    }
+
+    /**
+     * Assembles and uploads documents to Amazon Cloud Search for addition to the index.
+     *
+     * @param array $documentSet
+     *
+     * @return array|null
+     *
+     * @throws \Exception
+     */
+    public function addDocuments(Array $documentSet) {
+        $documents = [];
+
+        if(is_array($documentSet) && isset($documentSet['id'])) {
+            if(!$this->extractValidFields($documentSet)) {
+                throw new \Exception("Invalid field count.");
+            }
+
+            $document = [
+                "id" => $documentSet['id'],
+                "type" => 'add',
+                "fields" => $documentSet
+            ];
+
+            $documents[] = $document;
+        } elseif(is_array($documentSet)) {
+            foreach($documentSet as $documentData) {
+                if(!$this->extractValidFields($documentData)) {
+                    throw new \Exception("Invalid field count.");
+                }
+
+                $document = [
+                    "id" => $documentData['id'],
+                    "type" => 'add',
+                    "fields" => $documentData
+                ];
+
+                $documents[] = $document;
+            }
+        }
+
+        if(sizeof($documents) > 0) {
+            return $this->doDocumentRequest($documents);
+        }
+
+        return null;
+    }
+
+    /**
+     * Assembles and uploads document IDs to Amazon Cloud Services for deletion from the index.
+     *
+     * @param array $documentSet
+     *
+     * @return array|null
+     *
+     * @throws \Exception
+     */
+    public function deleteDocuments(Array $documentSet) {
+        $documents = [];
+
+        if(is_array($documentSet) && isset($documentSet['id'])) {
+            $document = [
+                "id" => $documentSet['id'],
+                "type" => 'delete',
+            ];
+
+            $documents[] = $document;
+        } elseif(is_array($documentSet)) {
+            foreach($documentSet as $documentData) {
+                if(!isset($documentData['id'])) {
+                    throw new \Exception("Missing document ID, cannot proceed.");
+                }
+
+                $document = [
+                    "id" => $documentData['id'],
+                    "type" => 'delete',
+                ];
+
+                $documents[] = $document;
+            }
+        }
+
+        if(sizeof($documents) > 0) {
+            return $this->doDocumentRequest($documents);
+        }
+
+        return null;
+    }
+
+    /**
+     * Extracts the fields specified in $validFields from the data set to avoid AWS errors.
+     *
+     * @param array $data
+     *
+     * @return bool
+     */
+    private function extractValidFields(Array &$data) {
+        $returnData = [];
+
+        foreach($data as $key => $value) {
+            if(in_array($key, $this->validFields)) {
+                $returnData[strtolower($key)] = $value;
+            }
+        }
+
+        if(sizeof($returnData) > 0) {
+            $data = $returnData;
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Search API endpoint
+     *
+     * @param string    $term
+     * @param bool      $returnClean
+     * @param array     $params
+     *
+     * @return array
+     */
+    public function search($term, $returnClean = true, Array $params = array()) {
+        $params['q'] = $term;
+
+        if (!isset($params['return']) && isset($this->returnFields)) {
+            $returnFields = $this->returnFields;
+            $params['return'] = implode(',', $this->returnFields);
+        }
+
+        $return = $this->doSearchRequest($params);
+
+        if (isset($returnFields)) {
+            $return['returnFields'] = $returnFields;
+        } else if (isset($this->returnFields)) {
+            $return['returnFields'] = $this->returnFields;
+        }
+
+        if($returnClean) {
+            $return = json_decode($return['response'], true);
+            $return = $return['hits']['hit'];
+
+            foreach($return as &$retData) {
+                $retData = $retData['fields'];
+            }
+        }
+
+        return $return;
+    }
+
+    /**
+     * Perform a search (GET) request
+     *
+     * @param array     $params
+     *
+     * @return array
+     */
+    private function doSearchRequest(Array $params) {
+        $url = $this->searchUrl . '?' . http_build_query($params);
+        return $this->doRequest($url, 'GET');
+    }
+
+    /**
+     * Perform a document (POST) request
+     *
+     * @param array     $params
+     *
+     * @return array
+     */
+    private function doDocumentRequest(Array $params) {
+        return $this->doRequest($this->documentUrl, 'POST', json_encode($params));
+    }
+
+    /**
+     * Connect to Amazon CloudSearch with specified parameters
+     *
+     * @param string    $url
+     * @param string    $method
+     * @param array     $parameters
+     *
+     * @throws \Exception
+     *
+     * @return array        contains successful status, http code, and response data
+     */
+    private function doRequest($url, $method, $parameters = null) {
+        // check required parameters are set when posting
+        if ($method == 'POST' && is_null($parameters)) {
+            throw new \Exception('Parameters must be defined when sending a post request');
+        }
+
+        $curl = curl_init();
+
+        $additionalHeaders = array(
+            'Accept: application/json'
+        );
+
+        if ($method == 'POST') {
+            curl_setopt($curl, CURLOPT_POST, true);
+            curl_setopt($curl, CURLOPT_POSTFIELDS, $parameters);
+
+            $additionalHeaders[] = 'Content-Type: application/json';
+            $additionalHeaders[] = 'Content-Length: ' . strlen($parameters);
+        }
+
+        curl_setopt($curl, CURLOPT_HTTPHEADER, $additionalHeaders);
+
+        curl_setopt($curl, CURLOPT_URL, $url);
+        curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+
+        $response = curl_exec($curl);
+        $responseInfo = curl_getinfo($curl);
+        curl_close($curl);
+
+        // build return array
+        $result = array(
+            'response' => $response,
+            'info' => $responseInfo
+        );
+
+        return $result;
+    }
+} 

@@ -1,0 +1,42 @@
+
+/**
+ * Copyright 2013 Trade On Up LLC.
+ * Originally written by Gage on 10/4/13
+ */
+
+namespace TradeOnUp\API;
+
+use Luracast\Restler\iCache;
+use TradeOnUp\Core\Memcache;
+
+class apiCache implements iCache
+{
+    private $memcache;
+
+    function __construct()
+    {
+        $this->memcache = Memcache::getInstance();
+    }
+
+    public function set($name, $data)
+    {
+        $this->memcache->set("restler-" . $name, $data);
+    }
+
+    public function get($name, $ignoreErrors = false)
+    {
+        $cacheVal = $this->memcache->get("restler-" . $name);
+
+        return ($cacheVal !== false ? $cacheVal : null);
+    }
+
+    public function clear($name, $ignoreErrors = false)
+    {
+        $this->memcache->delete("restler-" . $name);
+    }
+
+    public function isCached($name)
+    {
+        return ($this->memcache->get("restler-" . $name) !== false);
+    }
+}
